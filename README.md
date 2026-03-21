@@ -104,6 +104,89 @@ It is recommended to run File Browser behind a reverse proxy like Nginx and secu
 
 You should now be able to access File Browser at `https://your-domain.com`.
 
+## Post-Installation
+
+After installing File Browser, here are the next steps to get it running.
+
+### First Run
+
+To run File Browser for the first time, simply execute the command:
+
+```bash
+filebrowser
+```
+
+By default, it will listen on port `8080`. You can access it at `http://localhost:8080`. The default username and password are `admin` and `admin`.
+
+You can specify a different port with the `-p` flag:
+
+```bash
+filebrowser -p 8888
+```
+
+### Configuration
+
+File Browser can be configured using a configuration file or command-line flags. The default configuration file is `.filebrowser.json` in the same directory as the binary.
+
+For a full list of available commands and flags, you can run:
+
+```bash
+filebrowser --help
+```
+
+### Running as a Service (systemd)
+
+To run File Browser as a service on a Linux system with systemd, you can create a service file at `/etc/systemd/system/filebrowser.service`:
+
+```
+[Unit]
+Description=File Browser
+After=network.target
+
+[Service]
+User=your-user
+Group=your-group
+ExecStart=/usr/local/bin/filebrowser -c /etc/filebrowser/.filebrowser.json
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Remember to replace `your-user` and `your-group` with the appropriate user and group.
+
+Then, enable and start the service:
+
+```bash
+sudo systemctl enable filebrowser
+sudo systemctl start filebrowser
+```
+
+### Docker Compose
+
+For a more robust Docker setup, you can use Docker Compose. Create a `docker-compose.yml` file:
+
+```yaml
+version: '3.3'
+services:
+  filebrowser:
+    image: matindehghanian/filebrowser
+    container_name: filebrowser
+    volumes:
+      - /path/to/your/files:/srv
+      - /path/to/your/database.db:/database.db
+      - /path/to/your/.filebrowser.json:/.filebrowser.json
+    ports:
+      - 8080:80
+    restart: unless-stopped
+```
+
+Then, start the container with:
+
+```bash
+docker-compose up -d
+```
+
 ## Project Status
 
 This project is actively maintained. If you encounter any bugs, please open an issue.
