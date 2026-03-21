@@ -1,1 +1,0 @@
-self.__SSG_MANIFEST=new Set(["\u002Ffiles\u002F[[...path]]","\u002Fshare\u002F[hash]"]);self.__SSG_MANIFEST_CB&&self.__SSG_MANIFEST_CB()

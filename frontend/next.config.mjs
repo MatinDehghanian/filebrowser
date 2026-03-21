@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
+const isExportBuild = process.env.NODE_ENV === "production";
+
 const nextConfig = {
-  output: "export",
+  ...(isExportBuild ? { output: "export" } : {}),
   images: {
     unoptimized: true,
     remotePatterns: [
