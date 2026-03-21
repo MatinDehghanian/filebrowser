@@ -10,8 +10,8 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/filebrowser/filebrowser/v2/settings"
-	"github.com/filebrowser/filebrowser/v2/storage"
+	"github.com/MatinDehghanian/filebrowser/v2/settings"
+	"github.com/MatinDehghanian/filebrowser/v2/storage"
 )
 
 type modifyRequest struct {
@@ -93,8 +93,7 @@ func NewHandler(
 
 	api.PathPrefix("/usage").Handler(monkey(diskUsage, "/api/usage")).Methods("GET")
 
-	api.Path("/shares").Handler(monkey(shareListHandler, "/api/shares")).Methods("GET")
-	api.Path("/shares/").Handler(monkey(shareListHandler, "/api/shares")).Methods("GET")
+	api.PathPrefix("/shares").Handler(monkey(shareListHandler, "/api/shares")).Methods("GET")
 	api.PathPrefix("/share").Handler(monkey(shareGetsHandler, "/api/share")).Methods("GET")
 	api.PathPrefix("/share").Handler(monkey(sharePostHandler, "/api/share")).Methods("POST")
 	api.PathPrefix("/share").Handler(monkey(shareDeleteHandler, "/api/share")).Methods("DELETE")

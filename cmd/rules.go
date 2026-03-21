@@ -6,10 +6,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/filebrowser/filebrowser/v2/rules"
-	"github.com/filebrowser/filebrowser/v2/settings"
-	"github.com/filebrowser/filebrowser/v2/storage"
-	"github.com/filebrowser/filebrowser/v2/users"
+	"github.com/MatinDehghanian/filebrowser/v2/rules"
+	"github.com/MatinDehghanian/filebrowser/v2/settings"
+	"github.com/MatinDehghanian/filebrowser/v2/storage"
+	"github.com/MatinDehghanian/filebrowser/v2/users"
 )
 
 func init() {

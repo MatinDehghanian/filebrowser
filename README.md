@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/filebrowser/filebrowser/master/branding/banner.png" width="550"/>
+  <img src="https://raw.githubusercontent.com/MatinDehghanian/filebrowser/master/branding/banner.png" width="550"/>
 </p>
 
-[![Build](https://github.com/filebrowser/filebrowser/actions/workflows/ci.yaml/badge.svg)](https://github.com/filebrowser/filebrowser/actions/workflows/ci.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/filebrowser/filebrowser/v2)](https://goreportcard.com/report/github.com/filebrowser/filebrowser/v2)
-[![Version](https://img.shields.io/github/release/filebrowser/filebrowser.svg)](https://github.com/filebrowser/filebrowser/releases/latest)
+[![Build](https://github.com/MatinDehghanian/filebrowser/actions/workflows/ci.yaml/badge.svg)](https://github.com/MatinDehghanian/filebrowser/actions/workflows/ci.yaml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/MatinDehghanian/filebrowser/v2)](https://goreportcard.com/report/github.com/MatinDehghanian/filebrowser/v2)
+[![Version](https://img.shields.io/github/release/MatinDehghanian/filebrowser.svg)](https://github.com/MatinDehghanian/filebrowser/releases/latest)
 
 File Browser provides a file managing interface within a specified directory and it can be used to upload, delete, preview and edit your files. It is a **create-your-own-cloud**-kind of software where you can just install it on your server, direct it to a path and access your files through a nice web interface.
 

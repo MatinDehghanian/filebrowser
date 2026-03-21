@@ -11,8 +11,8 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/filebrowser/filebrowser/v2/files"
-	"github.com/filebrowser/filebrowser/v2/img"
+	"github.com/MatinDehghanian/filebrowser/v2/files"
+	"github.com/MatinDehghanian/filebrowser/v2/img"
 )
 
 /*

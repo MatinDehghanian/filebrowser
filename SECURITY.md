@@ -12,7 +12,7 @@ currently being supported with security updates.
 
 ## Reporting a Vulnerability
 
-Vulnerabilities with critical impact should be reported on the [Security](https://github.com/filebrowser/filebrowser/security) page of this repository, which is a private way of communicating vulnerabilities to maintainers. This project is in maintenance-only mode and it can take a while until someone gets back to you.
+Vulnerabilities with critical impact should be reported on the [Security](https://github.com/MatinDehghanian/filebrowser/security) page of this repository, which is a private way of communicating vulnerabilities to maintainers. This project is in maintenance-only mode and it can take a while until someone gets back to you.
 
 If it is not a critical vulnerability, please open an issue and we will categorize it as a security issue. By giving visibility, we can get more help from the community at fixing such issues.
 

@@ -22,14 +22,14 @@ import (
 	"github.com/spf13/viper"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/filebrowser/filebrowser/v2/auth"
-	"github.com/filebrowser/filebrowser/v2/diskcache"
-	"github.com/filebrowser/filebrowser/v2/frontend"
-	fbhttp "github.com/filebrowser/filebrowser/v2/http"
-	"github.com/filebrowser/filebrowser/v2/img"
-	"github.com/filebrowser/filebrowser/v2/settings"
-	"github.com/filebrowser/filebrowser/v2/storage"
-	"github.com/filebrowser/filebrowser/v2/users"
+	"github.com/MatinDehghanian/filebrowser/v2/auth"
+	"github.com/MatinDehghanian/filebrowser/v2/diskcache"
+	"github.com/MatinDehghanian/filebrowser/v2/frontend"
+	fbhttp "github.com/MatinDehghanian/filebrowser/v2/http"
+	"github.com/MatinDehghanian/filebrowser/v2/img"
+	"github.com/MatinDehghanian/filebrowser/v2/settings"
+	"github.com/MatinDehghanian/filebrowser/v2/storage"
+	"github.com/MatinDehghanian/filebrowser/v2/users"
 )
 
 var (
@@ -366,7 +366,7 @@ func getServerSettings(v *viper.Viper, st *storage.Storage) (*settings.Server, e
 		log.Println("WARNING: Command Runner feature enabled!")
 		log.Println("WARNING: This feature has known security vulnerabilities and should not")
 		log.Println("WARNING: you fully understand the risks involved. For more information")
-		log.Println("WARNING: read https://github.com/filebrowser/filebrowser/issues/5199")
+		log.Println("WARNING: read https://github.com/MatinDehghanian/filebrowser/issues/5199")
 	}
 
 	return server, nil

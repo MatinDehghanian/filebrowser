@@ -4,15 +4,15 @@ If you're interested in contributing to this project, this is the best place to 
 
 ## Project Structure
 
-The backend side of the application is written in [Go](https://golang.org/), while the frontend (located on a subdirectory of the same name) is written in [Vue.js](https://vuejs.org/). Due to the tight coupling required by some features, basic knowledge of both Go and Vue.js is recommended.
+The backend side of the application is written in [Go](https://golang.org/), while the frontend (located on a subdirectory of the same name) is a [Next.js](https://nextjs.org/) app. Due to the tight coupling required by some features, basic knowledge of both Go and Next.js is recommended.
 
 * Learn Go: [https://github.com/golang/go/wiki/Learn](https://github.com/golang/go/wiki/Learn)
-* Learn Vue.js: [https://vuejs.org/guide/introduction.html](https://vuejs.org/guide/introduction.html)
+* Learn Next.js: [https://nextjs.org/learn](https://nextjs.org/learn)
 
 We encourage you to use git to manage your fork. To clone the main repository, just run:
 
 ```bash
-git clone https://github.com/filebrowser/filebrowser
+git clone https://github.com/MatinDehghanian/filebrowser
 ```
 
 We use [Taskfile](https://taskfile.dev/) to manage the different processes (building, releasing, etc) automatically.
@@ -108,7 +108,7 @@ Translations are automatically pushed to GitHub via an integration.
 
 ## Authentication Provider
 
-To build a new authentication provider, you need to implement the [Auther interface](https://github.com/filebrowser/filebrowser/blob/master/auth/auth.go), whose method will be called on the login page after the user has submitted their login data.
+To build a new authentication provider, you need to implement the [Auther interface](https://github.com/MatinDehghanian/filebrowser/blob/master/auth/auth.go), whose method will be called on the login page after the user has submitted their login data.
 
 ```go
 // Auther is the authentication interface.
@@ -120,9 +120,9 @@ type Auther interface {
 
 After implementing the interface you should:
 
-1. Add it to [`auth` directory](https://github.com/filebrowser/filebrowser/blob/master/auth).
-2. Add it to the [configuration parser](https://github.com/filebrowser/filebrowser/blob/master/cmd/config.go) for the CLI.
-3. Add it to the [`authBackend.Get`](https://github.com/filebrowser/filebrowser/blob/master/storage/bolt/auth.go).
+1. Add it to [`auth` directory](https://github.com/MatinDehghanian/filebrowser/blob/master/auth).
+2. Add it to the [configuration parser](https://github.com/MatinDehghanian/filebrowser/blob/master/cmd/config.go) for the CLI.
+3. Add it to the [`authBackend.Get`](https://github.com/MatinDehghanian/filebrowser/blob/master/storage/bolt/auth.go).
 
 If you need to add more flags, please update the function `addConfigFlags`.
 
