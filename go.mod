@@ -1,6 +1,6 @@
 module github.com/MatinDehghanian/filebrowser/v2
 
-go 1.22.0
+go 1.25.0
 
 require (
 	github.com/asdine/storm/v3 v3.2.1
