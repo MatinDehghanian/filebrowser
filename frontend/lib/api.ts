@@ -190,7 +190,23 @@ class ApiClient {
 
   // Shares
   async getAllShares(): Promise<Share[]> {
-    return this.request<Share[]>("/shares");
+    try {
+      return await this.request<Share[]>("/shares/");
+    } catch (error) {
+      const apiError = error as ApiError;
+      if (apiError?.status === 404) {
+        try {
+          return await this.request<Share[]>("/shares");
+        } catch (fallbackError) {
+          const fallbackApiError = fallbackError as ApiError;
+          if (fallbackApiError?.status === 404) {
+            return this.request<Share[]>("/share/");
+          }
+          throw fallbackError;
+        }
+      }
+      throw error;
+    }
   }
 
   async getShares(path: string): Promise<Share[]> {

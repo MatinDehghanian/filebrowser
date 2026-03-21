@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Copy, Trash2, ExternalLink, FolderOpen, File, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -33,19 +33,25 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
-import type { Share } from "@/types";
-
-async function fetchAllShares(): Promise<Share[]> {
-  try {
-    return await api.getAllShares();
-  } catch {
-    return [];
-  }
-}
+import type { ApiError, Share } from "@/types";
 
 export default function SharesSettingsPage() {
-  const { data: shares, mutate, isLoading } = useSWR("all-shares", fetchAllShares);
+  const {
+    data: shares,
+    error,
+    mutate,
+    isLoading,
+  } = useSWR("all-shares", () => api.getAllShares());
   const [deleteShare, setDeleteShare] = useState<Share | null>(null);
+
+  useEffect(() => {
+    if (!error) {
+      return;
+    }
+
+    const apiError = error as ApiError;
+    toast.error(apiError.message || "Failed to load active shares");
+  }, [error]);
 
   const handleDelete = async () => {
     if (!deleteShare) return;
@@ -128,6 +134,18 @@ export default function SharesSettingsPage() {
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <h3 className="font-medium text-destructive">
+                Failed to load active shares
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                {(error as ApiError).message || "Please try again."}
+              </p>
+              <Button className="mt-4" variant="outline" onClick={() => mutate()}>
+                Retry
+              </Button>
             </div>
           ) : !shares || shares.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
