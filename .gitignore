@@ -34,6 +34,7 @@ build/
 /frontend/dist/*
 /frontend/out/*
 !/frontend/out/.gitkeep
+!/frontend/out/placeholder.txt
 !/frontend/dist/.gitkeep
 
 default.nix
