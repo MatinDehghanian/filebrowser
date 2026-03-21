@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Link2, Trash2, Eye, EyeOff, QrCode } from "lucide-react";
+import { Copy, Link2, Trash2, Eye, EyeOff, QrCode, Download } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import {
@@ -100,6 +100,19 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
     const url = `${window.location.origin}/share/${hash}`;
     navigator.clipboard.writeText(url);
     toast.success("Link copied to clipboard");
+  };
+
+  const copyDirectDownloadLink = (share: Share) => {
+    const isProtected = Boolean(share.token || share.password);
+    if (isProtected) {
+      toast.error("Direct download is disabled for password-protected shares");
+      return;
+    }
+
+    const downloadPath = api.getPublicDownloadUrl(share.hash, "", false, share.token);
+    const url = `${window.location.origin}${downloadPath}`;
+    navigator.clipboard.writeText(url);
+    toast.success("Direct download link copied");
   };
 
   const openShareQr = (hash: string) => {
@@ -219,45 +232,60 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
                 </h4>
                 
                 <div className="space-y-2">
-                  {shares.map((share) => (
-                    <div
-                      key={share.hash}
-                      className="flex items-center gap-2 rounded-md border p-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-sm font-mono">
-                          {share.hash}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {getExpiryText(share)}
-                          {share.password && " • Password protected"}
-                        </p>
+                  {shares.map((share) => {
+                    const isProtected = Boolean(share.token || share.password);
+
+                    return (
+                      <div
+                        key={share.hash}
+                        className="flex items-center gap-2 rounded-md border p-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="truncate text-sm font-mono">
+                            {share.hash}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {getExpiryText(share)}
+                            {isProtected && " • Password protected"}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => copyShareLink(share.hash)}
+                          title="Copy share page link"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        {!isProtected && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => copyDirectDownloadLink(share)}
+                            title="Copy direct download link"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openShareQr(share.hash)}
+                          title="Show QR code"
+                        >
+                          <QrCode className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteShare(share.hash)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => copyShareLink(share.hash)}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openShareQr(share.hash)}
-                        title="Show QR code"
-                      >
-                        <QrCode className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteShare(share.hash)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </>

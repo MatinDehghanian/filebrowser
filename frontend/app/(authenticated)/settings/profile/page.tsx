@@ -79,7 +79,11 @@ export default function ProfileSettingsPage() {
     setIsChangingPassword(true);
 
     try {
-      await api.updateUser(user.id, { password: newPassword });
+      await api.updateUser(
+        user.id,
+        { password: newPassword },
+        { currentPassword },
+      );
       toast.success("Password changed successfully");
       setCurrentPassword("");
       setNewPassword("");

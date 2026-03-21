@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Copy, Trash2, ExternalLink, FolderOpen, File } from "lucide-react";
+import { Copy, Trash2, ExternalLink, FolderOpen, File, Download } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,19 @@ export default function SharesSettingsPage() {
     toast.success("Link copied to clipboard");
   };
 
+  const copyDirectDownloadLink = (share: Share) => {
+    const isProtected = Boolean(share.token || share.password);
+    if (isProtected) {
+      toast.error("Direct download is disabled for password-protected shares");
+      return;
+    }
+
+    const downloadPath = api.getPublicDownloadUrl(share.hash, "", false, share.token);
+    const url = `${window.location.origin}${downloadPath}`;
+    navigator.clipboard.writeText(url);
+    toast.success("Direct download link copied");
+  };
+
   const getExpiryStatus = (share: Share) => {
     if (!share.expire || share.expire === 0) {
       return { text: "Never", variant: "secondary" as const };
@@ -136,13 +149,14 @@ export default function SharesSettingsPage() {
                   <TableHead>Hash</TableHead>
                   <TableHead>Protected</TableHead>
                   <TableHead>Expires</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
+                  <TableHead className="w-[140px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {shares.map((share) => {
                   const expiryStatus = getExpiryStatus(share);
                   const isDir = share.path.endsWith("/");
+                  const isProtected = Boolean(share.token || share.password);
                   
                   return (
                     <TableRow key={share.hash}>
@@ -167,7 +181,7 @@ export default function SharesSettingsPage() {
                         </code>
                       </TableCell>
                       <TableCell>
-                        {share.password ? (
+                        {isProtected ? (
                           <Badge variant="default">Yes</Badge>
                         ) : (
                           <Badge variant="secondary">No</Badge>
@@ -184,9 +198,20 @@ export default function SharesSettingsPage() {
                             variant="ghost"
                             size="icon"
                             onClick={() => copyShareLink(share.hash)}
+                            title="Copy share page link"
                           >
                             <Copy className="h-4 w-4" />
                           </Button>
+                          {!isProtected && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => copyDirectDownloadLink(share)}
+                              title="Copy direct download link"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"

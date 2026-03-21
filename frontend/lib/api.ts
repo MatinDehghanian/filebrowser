@@ -248,18 +248,37 @@ class ApiClient {
     return this.request<User>(`/users/${id}`);
   }
 
-  async createUser(user: Partial<User>): Promise<User> {
-    return this.request<User>("/users", {
+  async createUser(user: Partial<User>): Promise<void> {
+    await this.request<void>("/users", {
       method: "POST",
-      body: JSON.stringify(user),
+      body: JSON.stringify({
+        what: "user",
+        data: user,
+      }),
     });
   }
 
-  async updateUser(id: number | string, user: Partial<User>): Promise<User> {
-    return this.request<User>(`/users/${id}`, {
+  async updateUser(
+    id: number | string,
+    user: Partial<User>,
+    options?: { currentPassword?: string },
+  ): Promise<User> {
+    const fields = Object.keys(user);
+
+    await this.request<void>(`/users/${id}`, {
       method: "PUT",
-      body: JSON.stringify(user),
+      body: JSON.stringify({
+        what: "user",
+        which: fields,
+        current_password: options?.currentPassword,
+        data: {
+          id: typeof id === "number" ? id : Number(id),
+          ...user,
+        },
+      }),
     });
+
+    return this.getUser(id);
   }
 
   async deleteUser(id: number): Promise<void> {
