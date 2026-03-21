@@ -2,7 +2,7 @@ import ShareClient from "./share-client";
 
 const PLACEHOLDER_HASH = "placeholder";
 
-export const dynamicParams = process.env.NODE_ENV !== "production";
+export const dynamicParams = false;
 
 export async function generateStaticParams() {
   return [{ hash: PLACEHOLDER_HASH }];
