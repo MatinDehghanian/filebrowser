@@ -165,11 +165,7 @@ export default function SharePage({ params }: SharePageProps) {
                   </Button>
                 </div>
               </div>
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isSubmitting}
-              >
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isSubmitting ? "Verifying..." : "Access Share"}
               </Button>
             </form>
@@ -238,7 +234,7 @@ export default function SharePage({ params }: SharePageProps) {
 
   // Directory listing
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen flex justify-center bg-background">
       <div className="container max-w-4xl py-8">
         <Card>
           <CardHeader>
@@ -247,7 +243,9 @@ export default function SharePage({ params }: SharePageProps) {
                 <FolderOpen className="h-8 w-8 text-primary" />
                 <div>
                   <CardTitle>
-                    {currentPath ? currentPath.split("/").pop() : "Shared Folder"}
+                    {currentPath
+                      ? currentPath.split("/").pop()
+                      : "Shared Folder"}
                   </CardTitle>
                   <CardDescription>
                     {items.length} item{items.length !== 1 ? "s" : ""}
@@ -264,11 +262,7 @@ export default function SharePage({ params }: SharePageProps) {
             {/* Breadcrumb */}
             {currentPath && (
               <div className="mb-4 flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleNavigateUp}
-                >
+                <Button variant="ghost" size="sm" onClick={handleNavigateUp}>
                   .. Back
                 </Button>
                 <span className="text-sm text-muted-foreground">
@@ -299,7 +293,11 @@ export default function SharePage({ params }: SharePageProps) {
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-accent"
                         onClick={() => handleNavigate(item)}
                       >
-                        <FileIcon name={item.name} isDir={item.isDir} size="md" />
+                        <FileIcon
+                          name={item.name}
+                          isDir={item.isDir}
+                          size="md"
+                        />
                         <div className="flex-1 min-w-0 text-left">
                           <p className="truncate font-medium">{item.name}</p>
                         </div>
