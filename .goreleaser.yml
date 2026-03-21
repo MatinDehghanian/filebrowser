@@ -159,15 +159,15 @@ dockers:
 docker_manifests:
   - name_template: "docker.io/themattdev/filebrowser:latest"
     image_templates:
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-amd64"
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-arm64"
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-armv7"
-      - name_template: "docker.io/themattdev/filebrowser:{{ .Tag }}"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-amd64"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-arm64"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-armv7"
+  - name_template: "docker.io/themattdev/filebrowser:{{ .Tag }}"
     image_templates:
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-amd64"
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-arm64"
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-armv7"
-      - name_template: "docker.io/themattdev/filebrowser:v{{ .Major }}"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-amd64"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-arm64"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-armv7"
+  - name_template: "docker.io/themattdev/filebrowser:v{{ .Major }}"
     image_templates:
       - "docker.io/themattdev/filebrowser:v{{ .Major }}-amd64"
       - "docker.io/themattdev/filebrowser:v{{ .Major }}-arm64"
@@ -175,13 +175,13 @@ docker_manifests:
   ## s6 image manifests
   - name_template: "docker.io/themattdev/filebrowser:s6"
     image_templates:
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-amd64-s6"
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-arm64-s6"
-      - name_template: "docker.io/themattdev/filebrowser:{{ .Tag }}-s6"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-amd64-s6"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-arm64-s6"
+  - name_template: "docker.io/themattdev/filebrowser:{{ .Tag }}-s6"
     image_templates:
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-amd64-s6"
-        - "docker.io/themattdev/filebrowser:{{ .Tag }}-arm64-s6"
-      - name_template: "docker.io/themattdev/filebrowser:v{{ .Major }}-s6"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-amd64-s6"
+      - "docker.io/themattdev/filebrowser:{{ .Tag }}-arm64-s6"
+  - name_template: "docker.io/themattdev/filebrowser:v{{ .Major }}-s6"
     image_templates:
       - "docker.io/themattdev/filebrowser:v{{ .Major }}-amd64-s6"
       - "docker.io/themattdev/filebrowser:v{{ .Major }}-arm64-s6"
