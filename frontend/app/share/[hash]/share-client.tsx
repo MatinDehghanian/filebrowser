@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
+import Image from "next/image";
 import {
   Download,
   FolderOpen,
-  Lock,
   Eye,
   EyeOff,
   FileText,
@@ -102,7 +102,7 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
     return false;
   };
 
-  const fetchShare = async (path = "", pwd?: string) => {
+  const fetchShare = useCallback(async (path = "", pwd?: string) => {
     setIsLoading(true);
     setError(null);
     const effectivePassword = pwd ?? sharePassword;
@@ -141,7 +141,7 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [hash, sharePassword]);
 
   useEffect(() => {
     if (hash !== PLACEHOLDER_HASH) {
@@ -167,7 +167,7 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
     }
 
     fetchShare();
-  }, [hash]);
+  }, [fetchShare, hash]);
 
   useEffect(() => {
     const modalPreviewItem = isPreviewOpen ? previewItem : null;
@@ -311,9 +311,12 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
 
     if (previewItem.type?.startsWith("image")) {
       return (
-        <img
+        <Image
           src={getInlineUrl(previewItem)}
           alt={previewItem.name}
+          width={1200}
+          height={800}
+          sizes="100vw"
           className="max-h-[70vh] w-full object-contain"
         />
       );
@@ -477,7 +480,7 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
                     checked={selectedPaths.includes(item.path)}
                     onCheckedChange={() => togglePathSelection(item.path)}
                   />
-                  <FileIcon name={item.name} type={item.type} isDir={item.isDir} />
+                  <FileIcon name={item.name} isDir={item.isDir} />
                   <button
                     type="button"
                     className="text-left"
@@ -488,9 +491,7 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
                       {item.isDir && "/"}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {item.isDir
-                        ? `${item.items ?? 0} items`
-                        : formatBytes(item.size ?? 0)}
+                      {item.isDir ? "Folder" : formatBytes(item.size ?? 0)}
                     </p>
                   </button>
                 </div>
@@ -553,7 +554,7 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
       <ShareQrDialog
         open={isShareQrOpen}
         onOpenChange={setIsShareQrOpen}
-        shareUrl={typeof window !== "undefined" ? window.location.href : ""}
+        url={typeof window !== "undefined" ? window.location.href : ""}
       />
     </div>
   );

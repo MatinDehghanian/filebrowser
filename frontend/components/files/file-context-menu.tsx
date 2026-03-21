@@ -8,8 +8,6 @@ import {
   Trash2,
   Share2,
   Copy,
-  Info,
-  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FileItem } from "@/types";

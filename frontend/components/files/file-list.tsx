@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { FileItem } from "./file-item";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,9 +10,7 @@ import type { FileItem as FileItemType, ViewMode, Sorting } from "@/types";
 interface FileListProps {
   items: FileItemType[];
   viewMode: ViewMode;
-  path: string;
   sorting: Sorting;
-  onSortChange: (sorting: Sorting) => void;
   onContextMenu: (item: FileItemType, event: React.MouseEvent) => void;
   onPreview: (item: FileItemType) => void;
   selectedItems: FileItemType[];
@@ -22,9 +20,7 @@ interface FileListProps {
 export function FileList({
   items,
   viewMode,
-  path,
   sorting,
-  onSortChange,
   onContextMenu,
   onPreview,
   selectedItems,

@@ -51,7 +51,6 @@ export function Header({
 }: HeaderProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,10 +59,6 @@ export function Header({
     }
   };
 
-  const clearSearch = () => {
-    setSearchQuery("");
-    router.push(`/files${path}`);
-  };
 
   return (
     <TooltipProvider delayDuration={300}>
