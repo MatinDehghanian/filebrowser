@@ -19,7 +19,7 @@ export function Breadcrumbs({ path, className }: BreadcrumbsProps) {
 
   return (
     <nav className={cn("flex items-center", className)}>
-      <ol className="flex items-center gap-1 text-sm">
+      <ol className="flex items-center gap-1 pt-5 text-sm">
         <li>
           <Link
             href="/files/"
@@ -29,7 +29,7 @@ export function Breadcrumbs({ path, className }: BreadcrumbsProps) {
             <span className="sr-only">Home</span>
           </Link>
         </li>
-        
+
         {breadcrumbs.map((crumb, index) => (
           <li key={crumb.href} className="flex items-center gap-1">
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
