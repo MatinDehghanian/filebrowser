@@ -4,6 +4,7 @@ import type {
   FileItem,
   Share,
   Settings,
+  PublicSettings,
   LoginCredentials,
   AuthResponse,
   SearchResult,
@@ -317,6 +318,10 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(settings),
     });
+  }
+
+  async getPublicSettings(): Promise<PublicSettings> {
+    return this.request<PublicSettings>("/public/settings");
   }
 
   // Usage

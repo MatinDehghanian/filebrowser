@@ -115,6 +115,7 @@ func NewHandler(
 	public := api.PathPrefix("/public").Subrouter()
 	public.PathPrefix("/dl").Handler(monkey(publicDlHandler, "/api/public/dl/")).Methods("GET")
 	public.PathPrefix("/share").Handler(monkey(publicShareHandler, "/api/public/share/")).Methods("GET")
+	public.Handle("/settings", monkey(publicSettingsHandler, "/api/public/settings")).Methods("GET")
 
 	return stripPrefix(server.BaseURL, r), nil
 }

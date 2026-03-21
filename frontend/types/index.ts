@@ -122,6 +122,14 @@ export interface Settings {
   authMethod: string;
 }
 
+export interface PublicSettings {
+  signup: boolean;
+  hideLoginButton: boolean;
+  minimumPasswordLength: number;
+  authMethod: string;
+  branding: Branding;
+}
+
 export interface UserDefaults {
   scope: string;
   locale: string;

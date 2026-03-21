@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/MatinDehghanian/filebrowser/v2/files"
+	"github.com/MatinDehghanian/filebrowser/v2/settings"
 	"github.com/MatinDehghanian/filebrowser/v2/share"
 )
 
@@ -152,4 +153,24 @@ func authenticateShareRequest(r *http.Request, l *share.Link) (int, error) {
 func healthHandler(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(`{"status":"OK"}`))
+}
+
+type publicSettingsData struct {
+	Signup                bool                `json:"signup"`
+	HideLoginButton       bool                `json:"hideLoginButton"`
+	MinimumPasswordLength uint                `json:"minimumPasswordLength"`
+	AuthMethod            settings.AuthMethod `json:"authMethod"`
+	Branding              settings.Branding   `json:"branding"`
+}
+
+var publicSettingsHandler = func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	data := &publicSettingsData{
+		Signup:                d.settings.Signup,
+		HideLoginButton:       d.settings.HideLoginButton,
+		MinimumPasswordLength: d.settings.MinimumPasswordLength,
+		AuthMethod:            d.settings.AuthMethod,
+		Branding:              d.settings.Branding,
+	}
+
+	return renderJSON(w, r, data)
 }
