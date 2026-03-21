@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Link2, Trash2, Eye, EyeOff } from "lucide-react";
+import { Copy, Link2, Trash2, Eye, EyeOff, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import {
@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { ShareQrDialog } from "@/components/share/share-qr-dialog";
 import api from "@/lib/api";
 import type { FileItem, Share } from "@/types";
 
@@ -36,6 +37,8 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
   const [expires, setExpires] = useState("");
   const [unit, setUnit] = useState<"hours" | "days">("days");
   const [isCreating, setIsCreating] = useState(false);
+  const [isQrOpen, setIsQrOpen] = useState(false);
+  const [qrUrl, setQrUrl] = useState("");
 
   // Fetch existing shares
   const { data: shares, mutate } = useSWR<Share[]>(
@@ -97,6 +100,11 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
     const url = `${window.location.origin}/share/${hash}`;
     navigator.clipboard.writeText(url);
     toast.success("Link copied to clipboard");
+  };
+
+  const openShareQr = (hash: string) => {
+    setQrUrl(`${window.location.origin}/share/${hash}`);
+    setIsQrOpen(true);
   };
 
   const getExpiryText = (share: Share) => {
@@ -235,6 +243,14 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => openShareQr(share.hash)}
+                        title="Show QR code"
+                      >
+                        <QrCode className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => handleDeleteShare(share.hash)}
                         className="text-destructive hover:text-destructive"
                       >
@@ -248,6 +264,13 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
           )}
         </div>
       </DialogContent>
+
+      <ShareQrDialog
+        open={isQrOpen}
+        onOpenChange={setIsQrOpen}
+        url={qrUrl}
+        title="Share Link QR Code"
+      />
     </Dialog>
   );
 }

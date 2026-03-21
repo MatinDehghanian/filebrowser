@@ -9,6 +9,7 @@ import {
   EyeOff,
   FileText,
   X,
+  QrCode,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FileIcon } from "@/components/files/file-icon";
+import { ShareQrDialog } from "@/components/share/share-qr-dialog";
 import { formatBytes, formatDate, getFileType } from "@/lib/utils";
 import api from "@/lib/api";
 import type { FileItem, FileListingResponse } from "@/types";
@@ -54,6 +56,48 @@ export default function SharePage({ params }: SharePageProps) {
   const [previewItem, setPreviewItem] = useState<FileItem | null>(null);
   const [previewText, setPreviewText] = useState<string>("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isShareQrOpen, setIsShareQrOpen] = useState(false);
+
+  const isTextLikeFile = (item: FileItem) => {
+    if (item.isDir) {
+      return false;
+    }
+
+    const fileType = getFileType(item.name, item.isDir);
+    const lowerName = item.name.toLowerCase();
+    const mimeType = (item.type || "").toLowerCase();
+
+    if (fileType === "code") {
+      return true;
+    }
+
+    if (
+      mimeType.startsWith("text/") ||
+      mimeType.includes("json") ||
+      mimeType.includes("xml") ||
+      mimeType.includes("yaml") ||
+      mimeType.includes("javascript") ||
+      mimeType.includes("typescript") ||
+      mimeType.includes("shell")
+    ) {
+      return true;
+    }
+
+    if (
+      lowerName === "dockerfile" ||
+      lowerName === "makefile" ||
+      lowerName.endsWith(".txt") ||
+      lowerName.endsWith(".log") ||
+      lowerName.endsWith(".conf") ||
+      lowerName.endsWith(".ini") ||
+      lowerName.endsWith(".toml") ||
+      lowerName.endsWith(".env")
+    ) {
+      return true;
+    }
+
+    return false;
+  };
 
   const fetchShare = async (path = "", pwd?: string) => {
     setIsLoading(true);
@@ -100,27 +144,42 @@ export default function SharePage({ params }: SharePageProps) {
   }, [hash]);
 
   useEffect(() => {
-    if (!previewItem || !isPreviewOpen) {
-      return;
-    }
+    const modalPreviewItem = isPreviewOpen ? previewItem : null;
+    const singleFilePreviewItem =
+      data &&
+      !(
+        "items" in data && Array.isArray((data as FileListingResponse).items)
+      ) &&
+      !(data as FileItem).isDir
+        ? (data as FileItem)
+        : null;
 
-    const fileType = getFileType(previewItem.name, previewItem.isDir);
-    const isTextPreview =
-      previewItem.type === "text" ||
-      fileType === "code" ||
-      previewItem.name.toLowerCase().endsWith(".txt") ||
-      previewItem.name.toLowerCase().endsWith(".log");
+    const activePreviewItem = modalPreviewItem ?? singleFilePreviewItem;
 
-    if (!isTextPreview || previewItem.isDir) {
+    if (!activePreviewItem) {
       setPreviewText("");
+      setIsPreviewLoading(false);
       return;
     }
 
-    const token = previewItem.token || (data as { token?: string })?.token;
-    const contentUrl = api.getPublicDownloadUrl(hash, previewItem.path, true, token);
+    if (!isTextLikeFile(activePreviewItem)) {
+      setPreviewText("");
+      setIsPreviewLoading(false);
+      return;
+    }
+
+    const token =
+      activePreviewItem.token || (data as { token?: string })?.token;
+    const contentUrl = api.getPublicDownloadUrl(
+      hash,
+      activePreviewItem.path,
+      true,
+      token,
+    );
+    const abortController = new AbortController();
 
     setIsPreviewLoading(true);
-    fetch(contentUrl)
+    fetch(contentUrl, { signal: abortController.signal })
       .then((res) => {
         if (!res.ok) {
           throw new Error("Failed to load file preview");
@@ -130,6 +189,10 @@ export default function SharePage({ params }: SharePageProps) {
       .then((text) => setPreviewText(text))
       .catch(() => setPreviewText("Failed to load file preview"))
       .finally(() => setIsPreviewLoading(false));
+
+    return () => {
+      abortController.abort();
+    };
   }, [previewItem, isPreviewOpen, hash, data]);
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -186,6 +249,13 @@ export default function SharePage({ params }: SharePageProps) {
     parts.pop();
     const parentPath = parts.length > 0 ? "/" + parts.join("/") : "";
     fetchShare(parentPath);
+  };
+
+  const getShareUrl = () => {
+    if (typeof window === "undefined") {
+      return "";
+    }
+    return `${window.location.origin}/share/${hash}`;
   };
 
   // Loading state
@@ -325,11 +395,7 @@ export default function SharePage({ params }: SharePageProps) {
       );
     }
 
-    const isTextLike =
-      item.type === "text" ||
-      fileType === "code" ||
-      item.name.toLowerCase().endsWith(".txt") ||
-      item.name.toLowerCase().endsWith(".log");
+    const isTextLike = isTextLikeFile(item);
 
     if (isTextLike) {
       if (isPreviewLoading) {
@@ -373,17 +439,40 @@ export default function SharePage({ params }: SharePageProps) {
             </div>
             <CardTitle className="break-all">{fileData.name}</CardTitle>
             <CardDescription>
-              {formatBytes(fileData.size)} &middot; {formatDate(fileData.modified)}
+              {formatBytes(fileData.size)} &middot;{" "}
+              {formatDate(fileData.modified)}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="rounded-md border bg-muted/10 p-2">{renderFilePreview(fileData)}</div>
-            <Button className="w-full" onClick={() => handleDownload("", fileData)}>
-              <Download className="mr-2 h-4 w-4" />
-              Download
-            </Button>
+            <div className="rounded-md border bg-muted/10 p-2">
+              {renderFilePreview(fileData)}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                className="w-full"
+                onClick={() => handleDownload("", fileData)}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto"
+                onClick={() => setIsShareQrOpen(true)}
+              >
+                <QrCode className="mr-2 h-4 w-4" />
+                QR Code
+              </Button>
+            </div>
           </CardContent>
         </Card>
+
+        <ShareQrDialog
+          open={isShareQrOpen}
+          onOpenChange={setIsShareQrOpen}
+          url={getShareUrl()}
+          title="Share Link QR Code"
+        />
       </div>
     );
   }
@@ -411,6 +500,10 @@ export default function SharePage({ params }: SharePageProps) {
               <Button onClick={() => handleDownload(currentPath)}>
                 <Download className="mr-2 h-4 w-4" />
                 Download All
+              </Button>
+              <Button variant="outline" onClick={() => setIsShareQrOpen(true)}>
+                <QrCode className="mr-2 h-4 w-4" />
+                QR Code
               </Button>
             </div>
           </CardHeader>
@@ -474,7 +567,9 @@ export default function SharePage({ params }: SharePageProps) {
           {previewItem && (
             <>
               <DialogHeader>
-                <DialogTitle className="truncate pr-8">{previewItem.name}</DialogTitle>
+                <DialogTitle className="truncate pr-8">
+                  {previewItem.name}
+                </DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="rounded-md border bg-muted/10 p-2">
@@ -482,7 +577,8 @@ export default function SharePage({ params }: SharePageProps) {
                 </div>
                 <div className="flex items-center justify-between gap-2">
                   <p className="truncate text-xs text-muted-foreground sm:text-sm">
-                    {formatBytes(previewItem.size)} • {formatDate(previewItem.modified)}
+                    {formatBytes(previewItem.size)} •{" "}
+                    {formatDate(previewItem.modified)}
                   </p>
                   <div className="flex gap-2">
                     <Button
@@ -492,7 +588,11 @@ export default function SharePage({ params }: SharePageProps) {
                       <X className="mr-2 h-4 w-4" />
                       Close
                     </Button>
-                    <Button onClick={() => handleDownload(previewItem.path, previewItem)}>
+                    <Button
+                      onClick={() =>
+                        handleDownload(previewItem.path, previewItem)
+                      }
+                    >
                       <Download className="mr-2 h-4 w-4" />
                       Download
                     </Button>
@@ -503,6 +603,13 @@ export default function SharePage({ params }: SharePageProps) {
           )}
         </DialogContent>
       </Dialog>
+
+      <ShareQrDialog
+        open={isShareQrOpen}
+        onOpenChange={setIsShareQrOpen}
+        url={getShareUrl()}
+        title="Share Link QR Code"
+      />
     </div>
   );
 }
