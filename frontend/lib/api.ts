@@ -39,7 +39,7 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
   ): Promise<T> {
     const headers: HeadersInit = {
       ...options.headers,
@@ -109,7 +109,9 @@ class ApiClient {
   // Resources (Files/Folders)
   async getResource(path: string): Promise<FileListingResponse> {
     const encodedPath = encodeURIComponent(path);
-    return this.request<FileListingResponse>(`/resources${path}?path=${encodedPath}`);
+    return this.request<FileListingResponse>(
+      `/resources${path}?path=${encodedPath}`,
+    );
   }
 
   async deleteResource(path: string): Promise<void> {
@@ -149,7 +151,7 @@ class ApiClient {
     action: ResourceAction,
     destination: string,
     overwrite = false,
-    rename = false
+    rename = false,
   ): Promise<void> {
     const params = new URLSearchParams({
       action,
@@ -193,7 +195,7 @@ class ApiClient {
 
   async createShare(
     path: string,
-    options: { password?: string; expires?: string; unit?: string } = {}
+    options: { password?: string; expires?: string; unit?: string } = {},
   ): Promise<Share> {
     return this.request<Share>(`/share${path}`, {
       method: "POST",
@@ -208,8 +210,21 @@ class ApiClient {
   }
 
   // Public share access
-  async getPublicShare(hash: string, path = ""): Promise<FileItem | FileListingResponse> {
-    return this.request(`/public/share/${hash}${path}`);
+  async getPublicShare(
+    hash: string,
+    path = "",
+    password?: string,
+  ): Promise<FileItem | FileListingResponse> {
+    const headers: HeadersInit = {};
+
+    if (password) {
+      (headers as Record<string, string>)["X-SHARE-PASSWORD"] =
+        encodeURIComponent(password);
+    }
+
+    return this.request(`/public/share/${hash}${path}`, {
+      headers,
+    });
   }
 
   getPublicDownloadUrl(hash: string, path = "", inline = false): string {
@@ -276,7 +291,10 @@ class ApiClient {
   }
 
   // Checksums
-  async getChecksums(path: string, algo = "md5"): Promise<Record<string, string>> {
+  async getChecksums(
+    path: string,
+    algo = "md5",
+  ): Promise<Record<string, string>> {
     return this.request(`/checksum${path}?algo=${algo}`);
   }
 }

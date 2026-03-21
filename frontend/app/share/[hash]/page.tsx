@@ -43,19 +43,24 @@ export default function SharePage({ params }: SharePageProps) {
     try {
       // For password-protected shares, we need to pass the password
       // The API might use a token approach or direct password
-      const result = await api.getPublicShare(hash, path);
+      const result = await api.getPublicShare(hash, path, pwd);
       setData(result);
       setCurrentPath(path);
       setNeedsPassword(false);
     } catch (err) {
-      if (err instanceof Error) {
-        if (err.message.includes("password") || err.message.includes("401")) {
-          setNeedsPassword(true);
-        } else {
-          setError(err.message);
-        }
+      const apiError = err as { status?: number; message?: string };
+      const message =
+        apiError?.message ?? (err instanceof Error ? err.message : "");
+
+      if (
+        apiError?.status === 401 ||
+        message.includes("password") ||
+        message.includes("401") ||
+        message.includes("Unauthorized")
+      ) {
+        setNeedsPassword(true);
       } else {
-        setError("Failed to load share");
+        setError(message || "Failed to load share");
       }
     } finally {
       setIsLoading(false);
@@ -80,7 +85,7 @@ export default function SharePage({ params }: SharePageProps) {
       // Note: The actual password handling depends on the API implementation
       // This might need adjustment based on how the backend handles password-protected shares
       await fetchShare(currentPath, password);
-    } catch (err) {
+    } catch {
       toast.error("Invalid password");
     } finally {
       setIsSubmitting(false);
