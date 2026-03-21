@@ -3,6 +3,7 @@ const isExportBuild = process.env.NODE_ENV === "production";
 
 const nextConfig = {
   ...(isExportBuild ? { output: "export" } : {}),
+  productionBrowserSourceMaps: true,
   images: {
     unoptimized: true,
     remotePatterns: [
