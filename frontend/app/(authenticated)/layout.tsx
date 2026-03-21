@@ -28,7 +28,7 @@ export default function AuthenticatedLayout({
   return (
     <div className="flex h-screen overflow-scroll">
       <Sidebar />
-      <main className="flex-1 ps-8 overflow-scroll">{children}</main>
+      <main className="flex-1 ps-8 pt-5 overflow-scroll">{children}</main>
     </div>
   );
 }
