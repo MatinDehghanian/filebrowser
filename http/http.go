@@ -3,6 +3,10 @@ package fbhttp
 import (
 	"io/fs"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os"
+	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -35,13 +39,32 @@ func NewHandler(
 	})
 	index, static := getStaticHandlers(store, server, assetsFs)
 
+	frontendProxyURL := strings.TrimSpace(os.Getenv("FILEBROWSER_FRONTEND_URL"))
+	var frontendProxy http.Handler
+	if frontendProxyURL != "" {
+		parsedURL, err := url.Parse(frontendProxyURL)
+		if err != nil {
+			return nil, err
+		}
+
+		proxy := httputil.NewSingleHostReverseProxy(parsedURL)
+		proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
+			http.Error(w, "frontend proxy unavailable", http.StatusBadGateway)
+		}
+		frontendProxy = proxy
+	}
+
 	monkey := func(fn handleFunc, prefix string) http.Handler {
 		return handle(fn, prefix, store, server)
 	}
 
 	r.HandleFunc("/health", healthHandler)
-	r.PathPrefix("/static").Handler(static)
-	r.NotFoundHandler = index
+	if frontendProxy != nil {
+		r.NotFoundHandler = frontendProxy
+	} else {
+		r.PathPrefix("/static").Handler(static)
+		r.NotFoundHandler = index
+	}
 
 	api := r.PathPrefix("/api").Subrouter()
 
