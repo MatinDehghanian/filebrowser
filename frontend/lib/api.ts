@@ -9,6 +9,7 @@ import type {
   SearchResult,
   ResourceAction,
   ApiError,
+  DeepPartial,
 } from "@/types";
 
 const API_BASE = "/api";
@@ -238,7 +239,7 @@ class ApiClient {
     return this.request<Settings>("/settings");
   }
 
-  async updateSettings(settings: Partial<Settings>): Promise<void> {
+  async updateSettings(settings: DeepPartial<Settings>): Promise<void> {
     return this.request("/settings", {
       method: "PUT",
       body: JSON.stringify(settings),

@@ -25,7 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import { useIsAdmin } from "@/contexts/auth-context";
 import { redirect } from "next/navigation";
 import api from "@/lib/api";
-import type { Settings, ViewMode } from "@/types";
+import type { DeepPartial, Settings, ViewMode } from "@/types";
 
 export default function GlobalSettingsPage() {
   const isAdmin = useIsAdmin();
@@ -35,7 +35,7 @@ export default function GlobalSettingsPage() {
   );
 
   const [isSaving, setIsSaving] = useState(false);
-  const [formData, setFormData] = useState<Partial<Settings>>({});
+  const [formData, setFormData] = useState<DeepPartial<Settings>>({});
 
   // Redirect non-admins
   if (!isAdmin) {

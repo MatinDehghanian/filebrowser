@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Pencil, Trash2, Shield, User } from "lucide-react";
+import { Plus, Pencil, Trash2, Shield, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -247,7 +247,7 @@ export default function UsersSettingsPage() {
                         </Badge>
                       ) : (
                         <Badge variant="secondary" className="gap-1">
-                          <User className="h-3 w-3" />
+                          <UserIcon className="h-3 w-3" />
                           User
                         </Badge>
                       )}
