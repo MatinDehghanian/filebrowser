@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { FileIcon } from "./file-icon";
@@ -12,6 +11,7 @@ interface FileItemProps {
   viewMode: ViewMode;
   selected: boolean;
   onSelect: (item: FileItemType, event: React.MouseEvent) => void;
+  onToggleSelect: (item: FileItemType, checked: boolean) => void;
   onOpen: (item: FileItemType) => void;
   onContextMenu: (item: FileItemType, event: React.MouseEvent) => void;
 }
@@ -21,11 +21,10 @@ export function FileItem({
   viewMode,
   selected,
   onSelect,
+  onToggleSelect,
   onOpen,
   onContextMenu,
 }: FileItemProps) {
-  const router = useRouter();
-
   const handleClick = (e: React.MouseEvent) => {
     if (e.detail === 2) {
       // Double click - open
@@ -59,8 +58,8 @@ export function FileItem({
           checked={selected}
           onClick={(e) => {
             e.stopPropagation();
-            onSelect(item, e as unknown as React.MouseEvent);
           }}
+          onCheckedChange={(value) => onToggleSelect(item, Boolean(value))}
           className="opacity-0 group-hover:opacity-100 data-[state=checked]:opacity-100"
         />
         
@@ -98,8 +97,8 @@ export function FileItem({
         checked={selected}
         onClick={(e) => {
           e.stopPropagation();
-          onSelect(item, e as unknown as React.MouseEvent);
         }}
+        onCheckedChange={(value) => onToggleSelect(item, Boolean(value))}
         className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 data-[state=checked]:opacity-100"
       />
       

@@ -35,11 +35,9 @@ import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
 import type { Share } from "@/types";
 
-// Note: The API returns all shares for the current user
-// We need to fetch shares from root path to get all
 async function fetchAllShares(): Promise<Share[]> {
   try {
-    return await api.getShares("/");
+    return await api.getAllShares();
   } catch {
     return [];
   }

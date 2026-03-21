@@ -100,6 +100,22 @@ export function FileList({
     [selectedItems]
   );
 
+  const handleToggleSelect = useCallback(
+    (item: FileItemType, checked: boolean) => {
+      const isAlreadySelected = selectedItems.some((i) => i.path === item.path);
+
+      if (checked && !isAlreadySelected) {
+        onSelectionChange([...selectedItems, item]);
+        return;
+      }
+
+      if (!checked && isAlreadySelected) {
+        onSelectionChange(selectedItems.filter((i) => i.path !== item.path));
+      }
+    },
+    [selectedItems, onSelectionChange]
+  );
+
   if (items.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
@@ -148,6 +164,7 @@ export function FileList({
                 viewMode={viewMode}
                 selected={isSelected(item)}
                 onSelect={handleSelect}
+                onToggleSelect={handleToggleSelect}
                 onOpen={handleOpen}
                 onContextMenu={onContextMenu}
               />
@@ -170,6 +187,7 @@ export function FileList({
               viewMode={viewMode}
               selected={isSelected(item)}
               onSelect={handleSelect}
+              onToggleSelect={handleToggleSelect}
               onOpen={handleOpen}
               onContextMenu={onContextMenu}
             />

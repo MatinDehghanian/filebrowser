@@ -189,6 +189,10 @@ class ApiClient {
   }
 
   // Shares
+  async getAllShares(): Promise<Share[]> {
+    return this.request<Share[]>("/shares");
+  }
+
   async getShares(path: string): Promise<Share[]> {
     return this.request<Share[]>(`/share${path}`);
   }
