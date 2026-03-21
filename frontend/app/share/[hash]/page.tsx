@@ -31,6 +31,7 @@ export default function SharePage({ params }: SharePageProps) {
   const [error, setError] = useState<string | null>(null);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [password, setPassword] = useState("");
+  const [sharePassword, setSharePassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [data, setData] = useState<FileItem | FileListingResponse | null>(null);
@@ -39,14 +40,20 @@ export default function SharePage({ params }: SharePageProps) {
   const fetchShare = async (path = "", pwd?: string) => {
     setIsLoading(true);
     setError(null);
+    const effectivePassword = pwd ?? sharePassword;
 
     try {
-      // For password-protected shares, we need to pass the password
-      // The API might use a token approach or direct password
-      const result = await api.getPublicShare(hash, path, pwd);
+      const result = await api.getPublicShare(
+        hash,
+        path,
+        effectivePassword || undefined,
+      );
       setData(result);
       setCurrentPath(path);
       setNeedsPassword(false);
+      if (effectivePassword) {
+        setSharePassword(effectivePassword);
+      }
     } catch (err) {
       const apiError = err as { status?: number; message?: string };
       const message =
@@ -58,6 +65,9 @@ export default function SharePage({ params }: SharePageProps) {
         message.includes("401") ||
         message.includes("Unauthorized")
       ) {
+        if (pwd) {
+          setSharePassword("");
+        }
         setNeedsPassword(true);
       } else {
         setError(message || "Failed to load share");
