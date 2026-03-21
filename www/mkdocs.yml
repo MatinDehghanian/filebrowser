@@ -8,6 +8,11 @@ repo_url: 'https://github.com/MatinDehghanian/filebrowser'
 
 copyright: 'Copyright &copy; 2025 Matin Dehghanian'
 
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Features: features.md
+
 theme:
   name: material
   language: en
