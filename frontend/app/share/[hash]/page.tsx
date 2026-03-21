@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { Download, FolderOpen, Lock, Eye, EyeOff } from "lucide-react";
+import {
+  Download,
+  FolderOpen,
+  Lock,
+  Eye,
+  EyeOff,
+  FileText,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +22,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { FileIcon } from "@/components/files/file-icon";
-import { formatBytes, formatDate } from "@/lib/utils";
+import { formatBytes, formatDate, getFileType } from "@/lib/utils";
 import api from "@/lib/api";
 import type { FileItem, FileListingResponse } from "@/types";
 
@@ -36,6 +50,10 @@ export default function SharePage({ params }: SharePageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [data, setData] = useState<FileItem | FileListingResponse | null>(null);
   const [currentPath, setCurrentPath] = useState("");
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewItem, setPreviewItem] = useState<FileItem | null>(null);
+  const [previewText, setPreviewText] = useState<string>("");
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const fetchShare = async (path = "", pwd?: string) => {
     setIsLoading(true);
@@ -81,6 +99,39 @@ export default function SharePage({ params }: SharePageProps) {
     fetchShare();
   }, [hash]);
 
+  useEffect(() => {
+    if (!previewItem || !isPreviewOpen) {
+      return;
+    }
+
+    const fileType = getFileType(previewItem.name, previewItem.isDir);
+    const isTextPreview =
+      previewItem.type === "text" ||
+      fileType === "code" ||
+      previewItem.name.toLowerCase().endsWith(".txt") ||
+      previewItem.name.toLowerCase().endsWith(".log");
+
+    if (!isTextPreview || previewItem.isDir) {
+      setPreviewText("");
+      return;
+    }
+
+    const token = previewItem.token || (data as { token?: string })?.token;
+    const contentUrl = api.getPublicDownloadUrl(hash, previewItem.path, true, token);
+
+    setIsPreviewLoading(true);
+    fetch(contentUrl)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Failed to load file preview");
+        }
+        return res.text();
+      })
+      .then((text) => setPreviewText(text))
+      .catch(() => setPreviewText("Failed to load file preview"))
+      .finally(() => setIsPreviewLoading(false));
+  }, [previewItem, isPreviewOpen, hash, data]);
+
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -102,16 +153,31 @@ export default function SharePage({ params }: SharePageProps) {
     }
   };
 
-  const handleDownload = (path = "") => {
-    const url = api.getPublicDownloadUrl(hash, path);
+  const getShareToken = (item?: FileItem | null) => {
+    return item?.token || (data as { token?: string })?.token;
+  };
+
+  const handleDownload = (path = "", item?: FileItem | null) => {
+    const token = getShareToken(item);
+    const url = api.getPublicDownloadUrl(hash, path, false, token);
     window.open(url, "_blank");
+  };
+
+  const openPreview = (item: FileItem) => {
+    setPreviewItem(item);
+    setIsPreviewOpen(true);
+  };
+
+  const getInlineUrl = (item: FileItem) => {
+    const token = getShareToken(item);
+    return api.getPublicDownloadUrl(hash, item.path, true, token);
   };
 
   const handleNavigate = (item: FileItem) => {
     if (item.isDir) {
       fetchShare(item.path);
     } else {
-      handleDownload(item.path);
+      openPreview(item);
     }
   };
 
@@ -214,11 +280,93 @@ export default function SharePage({ params }: SharePageProps) {
   const items = isDirectory ? (data as FileListingResponse).items : [];
   const fileData = !isDirectory ? (data as FileItem) : null;
 
+  const renderFilePreview = (item: FileItem) => {
+    const fileType = getFileType(item.name, item.isDir);
+    const inlineUrl = getInlineUrl(item);
+
+    if (fileType === "image") {
+      return (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={inlineUrl}
+          alt={item.name}
+          className="h-full max-h-[70vh] w-full object-contain"
+        />
+      );
+    }
+
+    if (fileType === "video") {
+      return (
+        <video
+          src={inlineUrl}
+          controls
+          playsInline
+          className="h-full max-h-[70vh] w-full rounded-md bg-black"
+        />
+      );
+    }
+
+    if (fileType === "audio") {
+      return (
+        <div className="flex min-h-[260px] w-full flex-col items-center justify-center gap-4">
+          <FileText className="h-10 w-10 text-muted-foreground" />
+          <audio src={inlineUrl} controls className="w-full max-w-lg" />
+        </div>
+      );
+    }
+
+    if (item.name.toLowerCase().endsWith(".pdf")) {
+      return (
+        <iframe
+          src={inlineUrl}
+          title={item.name}
+          className="h-[70vh] w-full rounded-md border"
+        />
+      );
+    }
+
+    const isTextLike =
+      item.type === "text" ||
+      fileType === "code" ||
+      item.name.toLowerCase().endsWith(".txt") ||
+      item.name.toLowerCase().endsWith(".log");
+
+    if (isTextLike) {
+      if (isPreviewLoading) {
+        return (
+          <div className="flex min-h-[220px] items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          </div>
+        );
+      }
+
+      return (
+        <ScrollArea className="h-[70vh] w-full rounded-md border bg-muted/20">
+          <pre className="p-4 text-xs sm:text-sm">
+            <code>{previewText}</code>
+          </pre>
+        </ScrollArea>
+      );
+    }
+
+    return (
+      <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 rounded-md border border-dashed p-6 text-center">
+        <p className="text-sm text-muted-foreground">
+          Preview is not available for this file type.
+        </p>
+        <Button onClick={() => handleDownload(item.path, item)}>
+          <Download className="mr-2 h-4 w-4" />
+          Download file
+        </Button>
+      </div>
+    );
+  };
+
   // Single file view
   if (fileData && !fileData.isDir) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-4xl">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4">
               <FileIcon name={fileData.name} isDir={false} size="lg" />
@@ -228,11 +376,9 @@ export default function SharePage({ params }: SharePageProps) {
               {formatBytes(fileData.size)} &middot; {formatDate(fileData.modified)}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button
-              className="w-full"
-              onClick={() => handleDownload()}
-            >
+          <CardContent className="space-y-4">
+            <div className="rounded-md border bg-muted/10 p-2">{renderFilePreview(fileData)}</div>
+            <Button className="w-full" onClick={() => handleDownload("", fileData)}>
               <Download className="mr-2 h-4 w-4" />
               Download
             </Button>
@@ -322,6 +468,41 @@ export default function SharePage({ params }: SharePageProps) {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="w-[95vw] max-w-5xl">
+          {previewItem && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="truncate pr-8">{previewItem.name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="rounded-md border bg-muted/10 p-2">
+                  {renderFilePreview(previewItem)}
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-xs text-muted-foreground sm:text-sm">
+                    {formatBytes(previewItem.size)} • {formatDate(previewItem.modified)}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsPreviewOpen(false)}
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      Close
+                    </Button>
+                    <Button onClick={() => handleDownload(previewItem.path, previewItem)}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Download
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

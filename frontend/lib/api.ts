@@ -227,9 +227,15 @@ class ApiClient {
     });
   }
 
-  getPublicDownloadUrl(hash: string, path = "", inline = false): string {
+  getPublicDownloadUrl(
+    hash: string,
+    path = "",
+    inline = false,
+    token?: string,
+  ): string {
     const params = new URLSearchParams();
     if (inline) params.set("inline", "true");
+    if (token) params.set("token", token);
     return `${API_BASE}/public/dl/${hash}${path}?${params.toString()}`;
   }
 
