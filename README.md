@@ -8,20 +8,105 @@
 
 File Browser provides a file managing interface within a specified directory and it can be used to upload, delete, preview and edit your files. It is a **create-your-own-cloud**-kind of software where you can just install it on your server, direct it to a path and access your files through a nice web interface.
 
-## Documentation
+## Installation
 
-Documentation on how to install, configure, and contribute to this project is hosted at [filebrowser.org](https://filebrowser.org).
+There are several ways to install File Browser.
+
+### Online Installation (from GitHub)
+
+You can install File Browser with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MatinDehghanian/filebrowser/master/install.sh | bash
+```
+
+or
+
+```bash
+wget -qO- https://raw.githubusercontent.com/MatinDehghanian/filebrowser/master/install.sh | bash
+```
+
+This script will download and install the latest version of File Browser to `/usr/local/bin`.
+
+### Restricted Installation (from a custom domain)
+
+For restricted environments, you can install File Browser from a custom domain. First, you need to host the release files and a `latest` file with the version number on your domain. Then you can run:
+
+```bash
+curl -fsSL http://artist.mattweb.ir/filebrowser/install.sh | bash
+```
+
+### Offline Installation
+
+For offline installation, please refer to the [offline installation documentation](docs/installation/offline.md).
+
+### Docker
+
+You can also use Docker to run File Browser:
+
+```bash
+docker run -d \
+  -v /path/to/your/files:/srv \
+  -v /path/to/your/database.db:/database.db \
+  -p 8080:80 \
+  filebrowser/filebrowser
+```
+
+### Reverse Proxy with Nginx and SSL (Let's Encrypt)
+
+It is recommended to run File Browser behind a reverse proxy like Nginx and secure it with an SSL certificate. Here is an example configuration for Nginx:
+
+1.  **Install Nginx and Certbot:**
+
+    ```bash
+    sudo apt update
+    sudo apt install nginx python3-certbot-nginx
+    ```
+
+2.  **Configure Nginx:**
+
+    Create a new Nginx configuration file at `/etc/nginx/sites-available/filebrowser`:
+
+    ```nginx
+    server {
+        listen 80;
+        server_name your-domain.com;
+
+        location / {
+            proxy_pass http://localhost:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+    ```
+
+3.  **Enable the new configuration:**
+
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/filebrowser /etc/nginx/sites-enabled/
+    ```
+
+4.  **Obtain an SSL certificate from Let's Encrypt:**
+
+    ```bash
+    sudo certbot --nginx -d your-domain.com
+    ```
+
+    Certbot will automatically update your Nginx configuration to use SSL.
+
+5.  **Restart Nginx:**
+
+    ```bash
+    sudo systemctl restart nginx
+    ```
+
+You should now be able to access File Browser at `https://your-domain.com`.
 
 ## Project Status
 
-This project is a finished product which fulfills its goal: be a single binary web File Browser which can be run by anyone anywhere. That means that File Browser is currently on **maintenance-only** mode. Therefore, please note the following:
-
-- It can take a while until someone gets back to you. Please be patient.
-- [Issues](https://github.com/filebrowser/filebrowser/issues) are meant to track bugs. Unrelated issues will be converted into [discussions](https://github.com/filebrowser/filebrowser/discussions).
-- The priority is triaging issues, addressing security issues and reviewing pull requests meant to solve bugs.
-- No new features are planned. Pull requests for new features are not guaranteed to be reviewed.
-
-Please read [@hacdias' personal reflection](https://hacdias.com/2026/03/11/filebrowser/) on the project status.
+This project is actively maintained. If you encounter any bugs, please open an issue.
 
 ## Contributing
 
@@ -29,4 +114,4 @@ Contributions are always welcome. To start contributing to this project, read ou
 
 ## License
 
-[Apache License 2.0](LICENSE) © File Browser Contributors
+[Apache License 2.0](LICENSE) © Matin Dehghanian
