@@ -304,16 +304,16 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
     selectedPaths.forEach((path) => handleDownload(path));
   };
 
-  const renderPreview = () => {
-    if (!previewItem) {
+  const renderPreview = (item: FileItem | null) => {
+    if (!item) {
       return null;
     }
 
-    if (previewItem.type?.startsWith("image")) {
+    if (item.type?.startsWith("image")) {
       return (
         <Image
-          src={getInlineUrl(previewItem)}
-          alt={previewItem.name}
+          src={getInlineUrl(item)}
+          alt={item.name}
           width={1200}
           height={800}
           sizes="100vw"
@@ -322,7 +322,7 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
       );
     }
 
-    if (isTextLikeFile(previewItem)) {
+    if (isTextLikeFile(item)) {
       return (
         <ScrollArea className="max-h-[70vh] rounded-md border p-4">
           <pre className="whitespace-pre-wrap text-sm">{previewText}</pre>
@@ -413,6 +413,9 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
 
   const listing = "items" in data ? (data as FileListingResponse) : null;
   const file = listing ? null : (data as FileItem);
+  const canInlinePreview =
+    !!file &&
+    (file.type?.startsWith("image") || isTextLikeFile(file));
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -525,6 +528,17 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
                 Download
               </Button>
             </div>
+            {canInlinePreview && (
+              <div className="mt-6">
+                {isPreviewLoading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                  </div>
+                ) : (
+                  renderPreview(file)
+                )}
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -546,7 +560,7 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
             </div>
           ) : (
-            renderPreview()
+            renderPreview(previewItem)
           )}
         </DialogContent>
       </Dialog>
