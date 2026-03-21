@@ -17,6 +17,18 @@ const API_BASE = "/api";
 class ApiClient {
   private token: string | null = null;
 
+  private normalizeAuthResponse(response: AuthResponse | string): AuthResponse {
+    if (typeof response === "string") {
+      return { token: response };
+    }
+
+    if (response && typeof response.token === "string") {
+      return response;
+    }
+
+    throw new Error("Invalid authentication response");
+  }
+
   setToken(token: string | null) {
     this.token = token;
   }
@@ -71,10 +83,12 @@ class ApiClient {
 
   // Auth
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    return this.request<AuthResponse>("/login", {
+    const response = await this.request<AuthResponse | string>("/login", {
       method: "POST",
       body: JSON.stringify(credentials),
     });
+
+    return this.normalizeAuthResponse(response);
   }
 
   async signup(credentials: LoginCredentials): Promise<void> {
@@ -85,9 +99,11 @@ class ApiClient {
   }
 
   async renewToken(): Promise<AuthResponse> {
-    return this.request<AuthResponse>("/renew", {
+    const response = await this.request<AuthResponse | string>("/renew", {
       method: "POST",
     });
+
+    return this.normalizeAuthResponse(response);
   }
 
   // Resources (Files/Folders)
@@ -179,12 +195,9 @@ class ApiClient {
     path: string,
     options: { password?: string; expires?: string; unit?: string } = {}
   ): Promise<Share> {
-    const params = new URLSearchParams();
-    if (options.password) params.set("password", options.password);
-    if (options.expires) params.set("expires", options.expires);
-    if (options.unit) params.set("unit", options.unit);
-    return this.request<Share>(`/share${path}?${params.toString()}`, {
+    return this.request<Share>(`/share${path}`, {
       method: "POST",
+      body: JSON.stringify(options),
     });
   }
 

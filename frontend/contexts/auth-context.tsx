@@ -68,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setToken(null);
     api.setToken(null);
+    document.cookie = "auth=; Max-Age=0; Path=/; SameSite=Strict";
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }, []);
@@ -76,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(newToken);
     setUser(newUser);
     api.setToken(newToken);
+    document.cookie = `auth=${newToken}; Path=/; SameSite=Strict`;
     localStorage.setItem(TOKEN_KEY, newToken);
     localStorage.setItem(USER_KEY, JSON.stringify(newUser));
   }, []);
