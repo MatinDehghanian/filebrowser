@@ -62,8 +62,8 @@ dockers:
     goos: linux
     goarch: amd64
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64"
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-amd64"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-amd64"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-amd64"
     extra_files:
       - docker
   - dockerfile: Dockerfile
@@ -79,8 +79,8 @@ dockers:
     goos: linux
     goarch: arm64
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64"
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-arm64"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-arm64"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-arm64"
     extra_files:
       - docker
   - dockerfile: Dockerfile
@@ -97,8 +97,8 @@ dockers:
     goarch: arm
     goarm: "6"
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-armv6"
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-armv6"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-armv6"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-armv6"
     extra_files:
       - docker
   - dockerfile: Dockerfile
@@ -115,8 +115,8 @@ dockers:
     goarch: arm
     goarm: "7"
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-armv7"
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-armv7"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-armv7"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-armv7"
     extra_files:
       - docker
 
@@ -134,8 +134,8 @@ dockers:
     goos: linux
     goarch: amd64
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64-s6"
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-amd64-s6"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-amd64-s6"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-amd64-s6"
     extra_files:
       - docker
   - dockerfile: Dockerfile.s6
@@ -151,40 +151,40 @@ dockers:
     goos: linux
     goarch: arm64
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64-s6"
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-arm64-s6"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-arm64-s6"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-arm64-s6"
     extra_files:
       - docker
 
 docker_manifests:
-  - name_template: "MatinDehghanian/filebrowser:latest"
+  - name_template: "docker.io/MatinDehghanian/filebrowser:latest"
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64"
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64"
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-armv7"
-  - name_template: "MatinDehghanian/filebrowser:{{ .Tag }}"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-amd64"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-arm64"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-armv7"
+  - name_template: "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}"
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64"
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64"
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-armv7"
-  - name_template: "MatinDehghanian/filebrowser:v{{ .Major }}"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-amd64"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-arm64"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-armv7"
+  - name_template: "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}"
     image_templates:
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-amd64"
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-arm64"
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-armv7"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-amd64"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-arm64"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-armv7"
   ## s6 image manifests
-  - name_template: "MatinDehghanian/filebrowser:s6"
+  - name_template: "docker.io/MatinDehghanian/filebrowser:s6"
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64-s6"
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64-s6"
-  - name_template: "MatinDehghanian/filebrowser:{{ .Tag }}-s6"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-amd64-s6"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-arm64-s6"
+  - name_template: "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-s6"
     image_templates:
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64-s6"
-      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64-s6"
-  - name_template: "MatinDehghanian/filebrowser:v{{ .Major }}-s6"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-amd64-s6"
+      - "docker.io/MatinDehghanian/filebrowser:{{ .Tag }}-arm64-s6"
+  - name_template: "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-s6"
     image_templates:
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-amd64-s6"
-      - "MatinDehghanian/filebrowser:v{{ .Major }}-arm64-s6"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-amd64-s6"
+      - "docker.io/MatinDehghanian/filebrowser:v{{ .Major }}-arm64-s6"
 
 homebrew_casks:
   - name: filebrowser
