@@ -230,7 +230,7 @@ user created with the credentials from options "username" and "password".`,
 			}
 		}
 
-		assetsFs, err := fs.Sub(frontend.Assets(), "dist")
+		assetsFs, err := fs.Sub(frontend.Assets(), "out")
 		if err != nil {
 			panic(err)
 		}

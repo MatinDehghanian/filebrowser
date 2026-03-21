@@ -63,6 +63,10 @@ func NewHandler(
 		r.NotFoundHandler = frontendProxy
 	} else {
 		r.PathPrefix("/static").Handler(static)
+		r.PathPrefix("/_next/").Handler(static)
+		r.Handle("/favicon.ico", static)
+		r.Handle("/robots.txt", static)
+		r.Handle("/manifest.json", static)
 		r.NotFoundHandler = index
 	}
 
