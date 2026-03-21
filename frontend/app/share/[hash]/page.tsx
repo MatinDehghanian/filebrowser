@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -57,6 +58,7 @@ export default function SharePage({ params }: SharePageProps) {
   const [previewText, setPreviewText] = useState<string>("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isShareQrOpen, setIsShareQrOpen] = useState(false);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
 
   const isTextLikeFile = (item: FileItem) => {
     if (item.isDir) {
@@ -112,6 +114,7 @@ export default function SharePage({ params }: SharePageProps) {
       );
       setData(result);
       setCurrentPath(path);
+      setSelectedPaths([]);
       setNeedsPassword(false);
       if (effectivePassword) {
         setSharePassword(effectivePassword);
@@ -251,6 +254,66 @@ export default function SharePage({ params }: SharePageProps) {
     fetchShare(parentPath);
   };
 
+  const toggleSelectItem = (path: string, checked: boolean) => {
+    setSelectedPaths((prev) => {
+      if (checked) {
+        if (prev.includes(path)) {
+          return prev;
+        }
+        return [...prev, path];
+      }
+
+      return prev.filter((itemPath) => itemPath !== path);
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (!checked) {
+      setSelectedPaths([]);
+      return;
+    }
+
+    const selectablePaths = items.map((item) => item.path);
+    setSelectedPaths(selectablePaths);
+  };
+
+  const handleDownloadSelected = () => {
+    if (selectedPaths.length === 0) {
+      handleDownload(currentPath);
+      return;
+    }
+
+    if (selectedPaths.length === 1) {
+      const selectedPath = selectedPaths[0];
+      const selectedItem =
+        items.find((item) => item.path === selectedPath) || null;
+      if (selectedItem) {
+        handleDownload(selectedItem.path, selectedItem);
+      }
+      return;
+    }
+
+    const token = getShareToken();
+    const baseUrl = api.getPublicDownloadUrl(hash, currentPath, false, token);
+    const url = new URL(baseUrl, window.location.origin);
+
+    const relativePaths = selectedPaths.map((path) => {
+      if (!currentPath || currentPath === "/") {
+        return path;
+      }
+
+      if (path.startsWith(`${currentPath}/`)) {
+        return path.slice(currentPath.length);
+      }
+
+      return path;
+    });
+
+    const encodedPaths = relativePaths.map((path) => encodeURIComponent(path));
+    url.searchParams.set("files", encodedPaths.join(","));
+    window.open(url.toString(), "_blank");
+  };
+
   const getShareUrl = () => {
     if (typeof window === "undefined") {
       return "";
@@ -349,6 +412,14 @@ export default function SharePage({ params }: SharePageProps) {
   const isDirectory = "items" in data && Array.isArray((data as FileListingResponse).items);
   const items = isDirectory ? (data as FileListingResponse).items : [];
   const fileData = !isDirectory ? (data as FileItem) : null;
+  const sortedItems = [...items].sort((a, b) => {
+    if (a.isDir && !b.isDir) return -1;
+    if (!a.isDir && b.isDir) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  const allSelected =
+    sortedItems.length > 0 &&
+    sortedItems.every((item) => selectedPaths.includes(item.path));
 
   const renderFilePreview = (item: FileItem) => {
     const fileType = getFileType(item.name, item.isDir);
@@ -520,6 +591,36 @@ export default function SharePage({ params }: SharePageProps) {
               </div>
             )}
 
+            {sortedItems.length > 0 && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="select-all"
+                    checked={allSelected}
+                    onCheckedChange={(value) => handleSelectAll(Boolean(value))}
+                  />
+                  <Label
+                    htmlFor="select-all"
+                    className="cursor-pointer text-sm"
+                  >
+                    Select all
+                  </Label>
+                  {selectedPaths.length > 0 && (
+                    <span className="text-sm text-muted-foreground">
+                      ({selectedPaths.length} selected)
+                    </span>
+                  )}
+                </div>
+
+                <Button onClick={handleDownloadSelected}>
+                  <Download className="mr-2 h-4 w-4" />
+                  {selectedPaths.length > 0
+                    ? "Download Selected"
+                    : "Download All"}
+                </Button>
+              </div>
+            )}
+
             {/* File List */}
             <ScrollArea className="h-[60vh]">
               {items.length === 0 ? (
@@ -529,32 +630,35 @@ export default function SharePage({ params }: SharePageProps) {
                 </div>
               ) : (
                 <div className="space-y-1">
-                  {items
-                    .sort((a, b) => {
-                      // Folders first
-                      if (a.isDir && !b.isDir) return -1;
-                      if (!a.isDir && b.isDir) return 1;
-                      return a.name.localeCompare(b.name);
-                    })
-                    .map((item) => (
-                      <button
-                        key={item.path}
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-accent"
-                        onClick={() => handleNavigate(item)}
-                      >
-                        <FileIcon
-                          name={item.name}
-                          isDir={item.isDir}
-                          size="md"
-                        />
-                        <div className="flex-1 min-w-0 text-left">
-                          <p className="truncate font-medium">{item.name}</p>
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {item.isDir ? "-" : formatBytes(item.size)}
-                        </div>
-                      </button>
-                    ))}
+                  {sortedItems.map((item) => (
+                    <div
+                      key={item.path}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-accent"
+                      onClick={() => handleNavigate(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          handleNavigate(item);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                    >
+                      <Checkbox
+                        checked={selectedPaths.includes(item.path)}
+                        onClick={(e) => e.stopPropagation()}
+                        onCheckedChange={(value) =>
+                          toggleSelectItem(item.path, Boolean(value))
+                        }
+                      />
+                      <FileIcon name={item.name} isDir={item.isDir} size="md" />
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="truncate font-medium">{item.name}</p>
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        {item.isDir ? "-" : formatBytes(item.size)}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </ScrollArea>

@@ -9,8 +9,10 @@ interface SelectionBarProps {
   onDelete: () => void;
   onMove: () => void;
   onShare: () => void;
+  onDownload?: () => void;
   canDelete?: boolean;
   canShare?: boolean;
+  canDownload?: boolean;
 }
 
 export function SelectionBar({
@@ -19,8 +21,10 @@ export function SelectionBar({
   onDelete,
   onMove,
   onShare,
+  onDownload,
   canDelete = true,
   canShare = true,
+  canDownload = true,
 }: SelectionBarProps) {
   return (
     <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50">
@@ -50,6 +54,13 @@ export function SelectionBar({
           >
             <Share2 className="h-4 w-4" />
             Share
+          </Button>
+        )}
+
+        {canDownload && onDownload && (
+          <Button variant="ghost" size="sm" onClick={onDownload} className="gap-2">
+            <Download className="h-4 w-4" />
+            Download
           </Button>
         )}
         

@@ -19,6 +19,9 @@ import { MoveDialog } from "@/components/dialogs/move-dialog";
 import { ShareDialog } from "@/components/dialogs/share-dialog";
 import { PreviewDialog } from "@/components/dialogs/preview-dialog";
 import { SelectionBar } from "@/components/files/selection-bar";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
 import type { FileItem, FileListingResponse, ViewMode, Sorting } from "@/types";
 
 interface FilesPageProps {
@@ -139,6 +142,57 @@ export default function FilesPage({ params }: FilesPageProps) {
   const canDelete = user?.perm?.delete ?? false;
   const canRename = user?.perm?.rename ?? false;
   const canShare = user?.perm?.share ?? false;
+  const canDownload = user?.perm?.download ?? false;
+
+  const allSelected = items.length > 0 && selectedItems.length === items.length;
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      onSelectionChangeAll(items);
+      return;
+    }
+
+    setSelectedItems([]);
+  };
+
+  const onSelectionChangeAll = (nextItems: FileItem[]) => {
+    setSelectedItems(nextItems);
+  };
+
+  const handleDownloadSelected = () => {
+    if (!canDownload) {
+      return;
+    }
+
+    if (selectedItems.length === 0) {
+      window.open(api.getDownloadUrl(path), "_blank");
+      return;
+    }
+
+    if (selectedItems.length === 1) {
+      window.open(api.getDownloadUrl(selectedItems[0].path), "_blank");
+      return;
+    }
+
+    const baseUrl = api.getDownloadUrl(path);
+    const url = new URL(baseUrl, window.location.origin);
+
+    const relativePaths = selectedItems.map((item) => {
+      if (!path || path === "/") {
+        return item.path;
+      }
+
+      if (item.path.startsWith(`${path}/`)) {
+        return item.path.slice(path.length);
+      }
+
+      return item.path;
+    });
+
+    const encodedPaths = relativePaths.map((itemPath) => encodeURIComponent(itemPath));
+    url.searchParams.set("files", encodedPaths.join(","));
+    window.open(url.toString(), "_blank");
+  };
 
   if (error) {
     return (
@@ -176,6 +230,33 @@ export default function FilesPage({ params }: FilesPageProps) {
         )}
       </div>
 
+      {items.length > 0 && (
+        <div className="flex items-center justify-between border-b px-4 py-2">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="admin-select-all"
+              checked={allSelected}
+              onCheckedChange={(value) => handleSelectAll(Boolean(value))}
+            />
+            <label htmlFor="admin-select-all" className="cursor-pointer text-sm">
+              Select all
+            </label>
+            {selectedItems.length > 0 && (
+              <span className="text-sm text-muted-foreground">
+                ({selectedItems.length} selected)
+              </span>
+            )}
+          </div>
+
+          {canDownload && (
+            <Button size="sm" onClick={handleDownloadSelected}>
+              <Download className="mr-2 h-4 w-4" />
+              {selectedItems.length > 0 ? "Download Selected" : "Download All"}
+            </Button>
+          )}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -202,8 +283,10 @@ export default function FilesPage({ params }: FilesPageProps) {
           onDelete={() => setDeleteOpen(true)}
           onMove={() => setMoveOpen(true)}
           onShare={() => setShareOpen(true)}
+          onDownload={handleDownloadSelected}
           canDelete={canDelete}
           canShare={canShare}
+          canDownload={canDownload}
         />
       )}
 

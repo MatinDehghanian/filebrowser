@@ -96,23 +96,36 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
     }
   };
 
-  const copyShareLink = (hash: string) => {
+  const copyShareLink = async (hash: string) => {
     const url = `${window.location.origin}/share/${hash}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Link copied to clipboard");
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Failed to copy link");
+    }
   };
 
-  const copyDirectDownloadLink = (share: Share) => {
+  const copyDirectDownloadLink = async (share: Share) => {
     const isProtected = Boolean(share.token || share.password);
     if (isProtected) {
       toast.error("Direct download is disabled for password-protected shares");
       return;
     }
 
-    const downloadPath = api.getPublicDownloadUrl(share.hash, "", false, share.token);
+    const downloadPath = api.getPublicDownloadUrl(
+      share.hash,
+      "",
+      false,
+      share.token,
+    );
     const url = `${window.location.origin}${downloadPath}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Direct download link copied");
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Direct download link copied");
+    } catch {
+      toast.error("Failed to copy direct download link");
+    }
   };
 
   const openShareQr = (hash: string) => {

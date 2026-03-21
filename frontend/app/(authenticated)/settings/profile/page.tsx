@@ -79,19 +79,20 @@ export default function ProfileSettingsPage() {
     setIsChangingPassword(true);
 
     try {
-      await api.updateUser(
-        user.id,
-        { password: newPassword },
-        { currentPassword },
+      await toast.promise(
+        api.updateUser(user.id, { password: newPassword }, { currentPassword }),
+        {
+          loading: "Changing password...",
+          success: "Password changed successfully",
+          error: (error) =>
+            error instanceof Error
+              ? error.message
+              : "Failed to change password",
+        },
       );
-      toast.success("Password changed successfully");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to change password"
-      );
     } finally {
       setIsChangingPassword(false);
     }
@@ -101,19 +102,23 @@ export default function ProfileSettingsPage() {
     setIsSavingPrefs(true);
 
     try {
-      const updatedUser = await api.updateUser(user.id, {
+      const request = api.updateUser(user.id, {
         locale,
         viewMode,
         singleClick,
         hideDotfiles,
         dateFormat,
       });
+
+      toast.promise(request, {
+        loading: "Saving preferences...",
+        success: "Preferences saved successfully",
+        error: (error) =>
+          error instanceof Error ? error.message : "Failed to save preferences",
+      });
+
+      const updatedUser = await request;
       updateUser(updatedUser);
-      toast.success("Preferences saved successfully");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save preferences"
-      );
     } finally {
       setIsSavingPrefs(false);
     }

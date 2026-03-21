@@ -51,13 +51,18 @@ export default function GlobalSettingsPage() {
     setIsSaving(true);
 
     try {
-      await api.updateSettings(formData);
-      mutate();
-      setFormData({});
-      toast.success("Settings saved successfully");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save settings"
+      await toast.promise(
+        (async () => {
+          await api.updateSettings(formData);
+          await mutate();
+          setFormData({});
+        })(),
+        {
+          loading: "Saving settings...",
+          success: "Settings saved successfully",
+          error: (error) =>
+            error instanceof Error ? error.message : "Failed to save settings",
+        },
       );
     } finally {
       setIsSaving(false);
