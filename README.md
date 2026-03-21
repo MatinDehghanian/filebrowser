@@ -28,14 +28,6 @@ wget -qO- https://raw.githubusercontent.com/MatinDehghanian/filebrowser/master/i
 
 This script will download and install the latest version of File Browser to `/usr/local/bin`.
 
-### Restricted Installation (from a custom domain)
-
-For restricted environments, you can install File Browser from a custom domain. First, you need to host the release files and a `latest` file with the version number on your domain. Then you can run:
-
-```bash
-curl -fsSL http://artist.mattweb.ir/filebrowser/install.sh | bash
-```
-
 ### Offline Installation
 
 For offline installation, please refer to the [offline installation documentation](docs/installation/offline.md).
