@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
+    "postbuild": "node scripts/ensure-out-placeholder.js",
     "start": "next start",
     "lint": "next lint"
   },
