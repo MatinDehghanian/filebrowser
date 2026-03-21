@@ -9,7 +9,7 @@ builds:
   - env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w -X github.com/filebrowser/filebrowser/v2/version.Version={{ .Version }} -X github.com/filebrowser/filebrowser/v2/version.CommitSHA={{ .ShortCommit }}
+      - -s -w -X github.com/MatinDehghanian/filebrowser/v2/version.Version={{ .Version }} -X github.com/MatinDehghanian/filebrowser/v2/version.CommitSHA={{ .ShortCommit }}
     main: main.go
     binary: filebrowser
     goos:
@@ -62,8 +62,8 @@ dockers:
     goos: linux
     goarch: amd64
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-amd64"
-      - "filebrowser/filebrowser:v{{ .Major }}-amd64"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-amd64"
     extra_files:
       - docker
   - dockerfile: Dockerfile
@@ -79,8 +79,8 @@ dockers:
     goos: linux
     goarch: arm64
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-arm64"
-      - "filebrowser/filebrowser:v{{ .Major }}-arm64"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-arm64"
     extra_files:
       - docker
   - dockerfile: Dockerfile
@@ -97,8 +97,8 @@ dockers:
     goarch: arm
     goarm: "6"
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-armv6"
-      - "filebrowser/filebrowser:v{{ .Major }}-armv6"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-armv6"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-armv6"
     extra_files:
       - docker
   - dockerfile: Dockerfile
@@ -115,8 +115,8 @@ dockers:
     goarch: arm
     goarm: "7"
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-armv7"
-      - "filebrowser/filebrowser:v{{ .Major }}-armv7"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-armv7"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-armv7"
     extra_files:
       - docker
 
@@ -134,8 +134,8 @@ dockers:
     goos: linux
     goarch: amd64
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-amd64-s6"
-      - "filebrowser/filebrowser:v{{ .Major }}-amd64-s6"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64-s6"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-amd64-s6"
     extra_files:
       - docker
   - dockerfile: Dockerfile.s6
@@ -151,40 +151,40 @@ dockers:
     goos: linux
     goarch: arm64
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-arm64-s6"
-      - "filebrowser/filebrowser:v{{ .Major }}-arm64-s6"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64-s6"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-arm64-s6"
     extra_files:
       - docker
 
 docker_manifests:
-  - name_template: "filebrowser/filebrowser:latest"
+  - name_template: "MatinDehghanian/filebrowser:latest"
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-amd64"
-      - "filebrowser/filebrowser:{{ .Tag }}-arm64"
-      - "filebrowser/filebrowser:{{ .Tag }}-armv7"
-  - name_template: "filebrowser/filebrowser:{{ .Tag }}"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-armv7"
+  - name_template: "MatinDehghanian/filebrowser:{{ .Tag }}"
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-amd64"
-      - "filebrowser/filebrowser:{{ .Tag }}-arm64"
-      - "filebrowser/filebrowser:{{ .Tag }}-armv7"
-  - name_template: "filebrowser/filebrowser:v{{ .Major }}"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-armv7"
+  - name_template: "MatinDehghanian/filebrowser:v{{ .Major }}"
     image_templates:
-      - "filebrowser/filebrowser:v{{ .Major }}-amd64"
-      - "filebrowser/filebrowser:v{{ .Major }}-arm64"
-      - "filebrowser/filebrowser:v{{ .Major }}-armv7"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-amd64"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-arm64"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-armv7"
   ## s6 image manifests
-  - name_template: "filebrowser/filebrowser:s6"
+  - name_template: "MatinDehghanian/filebrowser:s6"
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-amd64-s6"
-      - "filebrowser/filebrowser:{{ .Tag }}-arm64-s6"
-  - name_template: "filebrowser/filebrowser:{{ .Tag }}-s6"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64-s6"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64-s6"
+  - name_template: "MatinDehghanian/filebrowser:{{ .Tag }}-s6"
     image_templates:
-      - "filebrowser/filebrowser:{{ .Tag }}-amd64-s6"
-      - "filebrowser/filebrowser:{{ .Tag }}-arm64-s6"
-  - name_template: "filebrowser/filebrowser:v{{ .Major }}-s6"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-amd64-s6"
+      - "MatinDehghanian/filebrowser:{{ .Tag }}-arm64-s6"
+  - name_template: "MatinDehghanian/filebrowser:v{{ .Major }}-s6"
     image_templates:
-      - "filebrowser/filebrowser:v{{ .Major }}-amd64-s6"
-      - "filebrowser/filebrowser:v{{ .Major }}-arm64-s6"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-amd64-s6"
+      - "MatinDehghanian/filebrowser:v{{ .Major }}-arm64-s6"
 
 homebrew_casks:
   - name: filebrowser
