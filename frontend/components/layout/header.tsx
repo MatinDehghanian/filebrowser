@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Upload,
@@ -49,13 +49,13 @@ export function Header({
   onRefresh,
   canCreate = true,
 }: HeaderProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      router.push(`/files${path}?search=${encodeURIComponent(searchQuery.trim())}`);
+      navigate(`/files${path}?search=${encodeURIComponent(searchQuery.trim())}`);
     }
   };
 

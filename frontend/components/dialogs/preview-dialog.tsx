@@ -117,7 +117,7 @@ export function PreviewDialog({
       case "image":
         return (
           <div className="flex h-full items-center justify-center p-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+              
             <img
               src={api.getPreviewUrl(item.path, "big")}
               alt={item.name}

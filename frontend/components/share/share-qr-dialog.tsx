@@ -72,7 +72,6 @@ export function ShareQrDialog({
             {isLoading ? (
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
             ) : qrDataUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src={qrDataUrl} alt="Share QR code" className="h-72 w-72" />
             ) : (
               <p className="text-sm text-muted-foreground">QR code unavailable</p>

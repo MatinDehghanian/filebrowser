@@ -8,7 +8,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useLocation, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import type { User, LoginCredentials } from "@/types";
 
@@ -61,8 +61,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
-  const pathname = usePathname();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
 
   const clearAuth = useCallback(() => {
     setUser(null);
@@ -94,9 +95,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Token renewal failed:", error);
       clearAuth();
-      router.push("/login");
+      navigate("/login");
     }
-  }, [token, saveAuth, clearAuth, router]);
+  }, [token, saveAuth, clearAuth, navigate]);
 
   // Initialize auth state from localStorage
   useEffect(() => {
@@ -148,9 +149,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     if (!token && !isPublicRoute) {
-      router.push("/login");
+      navigate("/login");
     }
-  }, [token, isLoading, pathname, router]);
+  }, [token, isLoading, pathname, navigate]);
 
   const login = useCallback(
     async (credentials: LoginCredentials) => {
@@ -162,15 +163,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       saveAuth(response.token, payload.user);
-      router.push("/files/");
+      navigate("/files/");
     },
-    [saveAuth, router]
+    [saveAuth, navigate]
   );
 
   const logout = useCallback(() => {
     clearAuth();
-    router.push("/login");
-  }, [clearAuth, router]);
+    navigate("/login");
+  }, [clearAuth, navigate]);
 
   const signup = useCallback(
     async (credentials: LoginCredentials) => {

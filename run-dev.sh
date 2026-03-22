@@ -18,11 +18,11 @@ pnpm dev > /tmp/filebrowser-frontend.log 2>&1 &
 FRONT_PID=$!
 
 for _ in {1..60}; do
-  if curl -sf http://127.0.0.1:3000 >/dev/null 2>&1; then
+  if curl -sf http://127.0.0.1:5173 >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
 
 cd "$ROOT_DIR"
-FILEBROWSER_FRONTEND_URL=http://127.0.0.1:3000 go run .
+FILEBROWSER_FRONTEND_URL=http://127.0.0.1:5173 go run .

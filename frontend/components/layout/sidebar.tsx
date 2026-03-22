@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, useLocation } from "react-router-dom";
 import {
   FolderOpen,
   Settings,
@@ -47,7 +46,8 @@ const settingsNavItems: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const location = useLocation();
+  const pathname = location.pathname;
   const { user, logout } = useAuth();
   const isAdmin = useIsAdmin();
   const { theme, setTheme } = useTheme();

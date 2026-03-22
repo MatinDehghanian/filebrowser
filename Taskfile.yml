@@ -20,7 +20,7 @@ tasks:
   dev:backend:
     desc: Start backend with frontend proxy
     cmds:
-      - FILEBROWSER_FRONTEND_URL=http://127.0.0.1:3000 go run .
+      - FILEBROWSER_FRONTEND_URL=http://127.0.0.1:5173 go run .
 
   dev:
     desc: Start frontend and backend together for local development

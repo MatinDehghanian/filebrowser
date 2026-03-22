@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo, use } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback, useMemo } from "react";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import useSWR from "swr";
 import { toast } from "sonner";
 import api from "@/lib/api";
@@ -25,16 +25,18 @@ import { Download } from "lucide-react";
 import type { FileItem, FileListingResponse, ViewMode, Sorting } from "@/types";
 
 interface FilesClientProps {
-  params: Promise<{ path?: string[] }>;
+  params?: never;
 }
 
-export default function FilesClient({ params }: FilesClientProps) {
-  const resolvedParams = use(params);
-  const pathSegments = resolvedParams.path || [];
-  const path = "/" + pathSegments.join("/");
+export default function FilesClient({}: FilesClientProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const rawPath = location.pathname.replace(/^\/files/, "") || "/";
+  const path = rawPath.length > 1 && rawPath.endsWith("/")
+    ? rawPath.slice(0, -1)
+    : rawPath;
 
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
 
   // State
@@ -286,7 +288,7 @@ export default function FilesClient({ params }: FilesClientProps) {
           onClose={closeContextMenu}
           onOpen={() => {
             if (contextMenu.item.isDir) {
-              router.push(`/files${contextMenu.item.path}/`);
+              navigate(`/files${contextMenu.item.path}/`);
             } else {
               handlePreview(contextMenu.item);
             }

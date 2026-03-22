@@ -1,18 +1,12 @@
+import { useParams } from "react-router-dom";
 import ShareClient from "./share-client";
 
-const PLACEHOLDER_HASH = "placeholder";
+export default function SharePage() {
+  const { hash } = useParams();
 
-export const dynamicParams = false;
+  if (!hash) {
+    return null;
+  }
 
-export async function generateStaticParams() {
-  return [{ hash: PLACEHOLDER_HASH }];
-}
-
-interface SharePageProps {
-  params: Promise<{ hash: string }>;
-}
-
-export default async function SharePage({ params }: SharePageProps) {
-  const resolvedParams = await params;
-  return <ShareClient initialHash={resolvedParams.hash} />;
+  return <ShareClient initialHash={hash} />;
 }

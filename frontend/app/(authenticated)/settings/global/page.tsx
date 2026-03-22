@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
@@ -23,11 +24,11 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useIsAdmin } from "@/contexts/auth-context";
-import { redirect } from "next/navigation";
 import api from "@/lib/api";
 import type { DeepPartial, Settings, ViewMode } from "@/types";
 
 export default function GlobalSettingsPage() {
+  const navigate = useNavigate();
   const isAdmin = useIsAdmin();
   const { data: settings, mutate, isLoading } = useSWR<Settings>(
     "settings",
@@ -37,9 +38,14 @@ export default function GlobalSettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState<DeepPartial<Settings>>({});
 
-  // Redirect non-admins
+  useEffect(() => {
+    if (!isAdmin) {
+      navigate("/files/", { replace: true });
+    }
+  }, [isAdmin, navigate]);
+
   if (!isAdmin) {
-    redirect("/files/");
+    return null;
   }
 
   // Initialize form data when settings load

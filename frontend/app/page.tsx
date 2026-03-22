@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { Navigate } from "react-router-dom";
 
 export default function RootPage() {
-  redirect("/files/");
+  return <Navigate to="/files/" replace />;
 }

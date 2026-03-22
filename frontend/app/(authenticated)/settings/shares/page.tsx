@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { Copy, Trash2, ExternalLink, FolderOpen, File, Download } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";

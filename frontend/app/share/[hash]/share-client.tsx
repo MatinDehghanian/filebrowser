@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useState, useEffect } from "react";
-import Image from "next/image";
 import {
   Download,
   FolderOpen,
@@ -311,12 +310,9 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
 
     if (item.type?.startsWith("image")) {
       return (
-        <Image
+        <img
           src={getInlineUrl(item)}
           alt={item.name}
-          width={1200}
-          height={800}
-          sizes="100vw"
           className="max-h-[70vh] w-full object-contain"
         />
       );

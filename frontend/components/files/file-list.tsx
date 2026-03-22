@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
 import { FileItem } from "./file-item";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,7 @@ export function FileList({
   selectedItems,
   onSelectionChange,
 }: FileListProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
 
   // Sort items - folders first, then by sorting criteria
   const sortedItems = useMemo(() => {
@@ -83,12 +83,12 @@ export function FileList({
   const handleOpen = useCallback(
     (item: FileItemType) => {
       if (item.isDir) {
-        router.push(`/files${item.path}/`);
+        navigate(`/files${item.path}/`);
       } else {
         onPreview(item);
       }
     },
-    [router, onPreview]
+    [navigate, onPreview]
   );
 
   const isSelected = useCallback(

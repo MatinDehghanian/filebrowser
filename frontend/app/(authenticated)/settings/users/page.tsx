@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, Pencil, Trash2, Shield, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";
@@ -43,7 +44,6 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useIsAdmin } from "@/contexts/auth-context";
-import { redirect } from "next/navigation";
 import api from "@/lib/api";
 import type { User, Permissions } from "@/types";
 
@@ -75,6 +75,7 @@ const INITIAL_FORM: UserFormData = {
 };
 
 export default function UsersSettingsPage() {
+  const navigate = useNavigate();
   const isAdmin = useIsAdmin();
   const { data: users, mutate, isLoading } = useSWR<User[]>("users", () => api.getUsers());
   
@@ -84,9 +85,14 @@ export default function UsersSettingsPage() {
   const [formData, setFormData] = useState<UserFormData>(INITIAL_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect non-admins
+  useEffect(() => {
+    if (!isAdmin) {
+      navigate("/files/", { replace: true });
+    }
+  }, [isAdmin, navigate]);
+
   if (!isAdmin) {
-    redirect("/files/");
+    return null;
   }
 
   const handleOpenDialog = (user?: User) => {
