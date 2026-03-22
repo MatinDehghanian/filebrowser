@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { getParentPath } from "@/lib/utils";
@@ -45,14 +46,31 @@ export function FileItem({
     return parentPath || "/";
   };
 
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(pointer: coarse)");
+    const updateDeviceType = () => setIsTouchDevice(mediaQuery.matches);
+
+    updateDeviceType();
+    mediaQuery.addEventListener("change", updateDeviceType);
+
+    return () => {
+      mediaQuery.removeEventListener("change", updateDeviceType);
+    };
+  }, []);
+
   const parentPath = getDisplayParentPath();
 
   const handleClick = (e: React.MouseEvent) => {
+    if (isTouchDevice) {
+      onOpen(item);
+      return;
+    }
+
     if (e.detail === 2) {
-      // Double click - open
       onOpen(item);
     } else {
-      // Single click - select
       onSelect(item, e);
     }
   };
@@ -82,7 +100,7 @@ export function FileItem({
             e.stopPropagation();
           }}
           onCheckedChange={(value) => onToggleSelect(item, Boolean(value))}
-          className="opacity-0 group-hover:opacity-100 data-[state=checked]:opacity-100"
+          className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 data-[state=checked]:opacity-100"
         />
         
         <FileIcon name={item.name} isDir={item.isDir} size="md" />
@@ -124,7 +142,7 @@ export function FileItem({
           e.stopPropagation();
         }}
         onCheckedChange={(value) => onToggleSelect(item, Boolean(value))}
-        className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 data-[state=checked]:opacity-100"
+        className="absolute top-2 left-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 data-[state=checked]:opacity-100"
       />
       
       <div className="flex h-16 w-16 items-center justify-center">
