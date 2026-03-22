@@ -24,7 +24,7 @@ var withHashFile = func(fn handleFunc) handleFunc {
 			return errToStatus(err), err
 		}
 
-		status, err := authenticateShareRequest(r, link)
+		status, err := authenticateShareRequest(r, link, d)
 		if status != 0 || err != nil {
 			return status, err
 		}
@@ -104,6 +104,9 @@ func ifPathWithName(r *http.Request) (id, filePath string) {
 
 var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	file := d.raw.(*files.FileInfo)
+	if err := incrementShareVisitCount(r, d); err != nil {
+		return http.StatusInternalServerError, err
+	}
 
 	if file.IsDir {
 		file.Sorting = files.Sorting{By: "name", Asc: false}
@@ -116,6 +119,9 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 
 var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	file := d.raw.(*files.FileInfo)
+	if err := incrementShareDownloadCount(r, d); err != nil {
+		return http.StatusInternalServerError, err
+	}
 	if !file.IsDir {
 		return rawFileHandler(w, r, file)
 	}
@@ -123,12 +129,16 @@ var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, 
 	return rawDirHandler(w, r, d, file)
 })
 
-func authenticateShareRequest(r *http.Request, l *share.Link) (int, error) {
+func authenticateShareRequest(r *http.Request, l *share.Link, d *data) (int, error) {
 	if l.PasswordHash == "" {
 		return 0, nil
 	}
 
 	if r.URL.Query().Get("token") == l.Token {
+		l.AuthSuccessCount++
+		if err := d.store.Share.Save(l); err != nil {
+			return http.StatusInternalServerError, err
+		}
 		return 0, nil
 	}
 
@@ -138,16 +148,51 @@ func authenticateShareRequest(r *http.Request, l *share.Link) (int, error) {
 		return 0, err
 	}
 	if password == "" {
+		l.AuthFailureCount++
+		if saveErr := d.store.Share.Save(l); saveErr != nil {
+			return http.StatusInternalServerError, saveErr
+		}
 		return http.StatusUnauthorized, nil
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(l.PasswordHash), []byte(password)); err != nil {
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			l.AuthFailureCount++
+			if saveErr := d.store.Share.Save(l); saveErr != nil {
+				return http.StatusInternalServerError, saveErr
+			}
 			return http.StatusUnauthorized, nil
 		}
 		return 0, err
 	}
 
+	l.AuthSuccessCount++
+	if err := d.store.Share.Save(l); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
 	return 0, nil
+}
+
+func incrementShareVisitCount(r *http.Request, d *data) error {
+	id, _ := ifPathWithName(r)
+	link, err := d.store.Share.GetByHash(id)
+	if err != nil {
+		return err
+	}
+
+	link.VisitCount++
+	return d.store.Share.Save(link)
+}
+
+func incrementShareDownloadCount(r *http.Request, d *data) error {
+	id, _ := ifPathWithName(r)
+	link, err := d.store.Share.GetByHash(id)
+	if err != nil {
+		return err
+	}
+
+	link.DownloadCount++
+	return d.store.Share.Save(link)
 }
 
 func healthHandler(w http.ResponseWriter, _ *http.Request) {

@@ -82,6 +82,10 @@ export interface Share {
   path: string;
   userID: number;
   expire: number;
+  visitCount: number;
+  downloadCount: number;
+  authSuccessCount: number;
+  authFailureCount: number;
   unit: "hours" | "days" | "seconds";
   token?: string;
   password?: string;

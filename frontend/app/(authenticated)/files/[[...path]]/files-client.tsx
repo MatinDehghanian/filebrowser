@@ -158,6 +158,7 @@ export default function FilesClient({}: FilesClientProps) {
   const canRename = user?.perm?.rename ?? false;
   const canShare = user?.perm?.share ?? false;
   const canDownload = user?.perm?.download ?? false;
+  const canModify = user?.perm?.modify ?? false;
 
   const allSelected = items.length > 0 && selectedItems.length === items.length;
 
@@ -521,6 +522,7 @@ export default function FilesClient({}: FilesClientProps) {
         item={previewItem}
         items={items.filter((item) => !item.isDir)}
         onNavigate={(item) => setPreviewItem(item)}
+        canEdit={canModify}
       />
     </div>
   );

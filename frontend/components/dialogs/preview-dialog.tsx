@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Maximize2,
   Minimize2,
+  Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -27,6 +28,7 @@ interface PreviewDialogProps {
   item: FileItem | null;
   items: FileItem[];
   onNavigate: (item: FileItem) => void;
+  canEdit: boolean;
 }
 
 export function PreviewDialog({
@@ -35,16 +37,27 @@ export function PreviewDialog({
   item,
   items,
   onNavigate,
+  canEdit,
 }: PreviewDialogProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [textContent, setTextContent] = useState<string | null>(null);
+  const [editedContent, setEditedContent] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const currentIndex = item ? items.findIndex((i) => i.path === item.path) : -1;
   const canGoPrev = currentIndex > 0;
   const canGoNext = currentIndex < items.length - 1;
 
   const fileType = item ? getFileType(item.name, item.isDir) : null;
+  const canEditCurrentFile = Boolean(item && canEdit && fileType === "code");
+
+  useEffect(() => {
+    if (!open) {
+      setEditedContent("");
+      setIsSaving(false);
+    }
+  }, [open]);
 
   // Load text content for code/text files
   useEffect(() => {
@@ -59,18 +72,41 @@ export function PreviewDialog({
         .getFileContent(item.path)
         .then((content) => {
           setTextContent(content);
+          setEditedContent(content);
         })
         .catch((error) => {
           toast.error(
             error instanceof Error ? error.message : "Failed to load file content"
           );
           setTextContent(null);
+          setEditedContent("");
         })
         .finally(() => {
           setIsLoading(false);
         });
     }
   }, [item, open, fileType]);
+
+  const handleSave = async () => {
+    if (!item || !canEditCurrentFile || textContent === null) {
+      return;
+    }
+
+    if (editedContent === textContent) {
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await api.updateFile(item.path, editedContent);
+      setTextContent(editedContent);
+      toast.success(`Saved ${item.name}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save file");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handlePrev = useCallback(() => {
     if (canGoPrev) {
@@ -89,6 +125,13 @@ export function PreviewDialog({
     if (!open) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         handlePrev();
@@ -178,6 +221,40 @@ export function PreviewDialog({
           );
         }
         if (textContent !== null) {
+          if (canEditCurrentFile) {
+            return (
+              <div className="flex h-full flex-col">
+                <div className="flex items-center justify-end gap-2 border-b px-3 py-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setEditedContent(textContent)}
+                    disabled={isSaving || editedContent === textContent}
+                  >
+                    Reset
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSave}
+                    disabled={
+                      isSaving ||
+                      textContent === null ||
+                      editedContent === textContent
+                    }
+                  >
+                    <Save className="mr-2 h-4 w-4" />
+                    {isSaving ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+                <textarea
+                  className="h-full w-full resize-none border-0 bg-background p-4 font-mono text-sm focus-visible:outline-none"
+                  value={editedContent}
+                  onChange={(event) => setEditedContent(event.target.value)}
+                />
+              </div>
+            );
+          }
+
           return (
             <ScrollArea className="h-full">
               <pre className="p-4 text-sm">

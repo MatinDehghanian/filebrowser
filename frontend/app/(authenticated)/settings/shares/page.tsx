@@ -168,6 +168,9 @@ export default function SharesSettingsPage() {
                   <TableHead>Path</TableHead>
                   <TableHead>Hash</TableHead>
                   <TableHead>Protected</TableHead>
+                  <TableHead>Visits</TableHead>
+                  <TableHead>Downloads</TableHead>
+                  <TableHead>Auth (ok/failed)</TableHead>
                   <TableHead>Expires</TableHead>
                   <TableHead className="w-[140px]">Actions</TableHead>
                 </TableRow>
@@ -206,6 +209,13 @@ export default function SharesSettingsPage() {
                         ) : (
                           <Badge variant="secondary">No</Badge>
                         )}
+                      </TableCell>
+                      <TableCell>{share.visitCount ?? 0}</TableCell>
+                      <TableCell>{share.downloadCount ?? 0}</TableCell>
+                      <TableCell>
+                        {isProtected
+                          ? `${share.authSuccessCount ?? 0} / ${share.authFailureCount ?? 0}`
+                          : "-"}
                       </TableCell>
                       <TableCell>
                         <Badge variant={expiryStatus.variant}>
