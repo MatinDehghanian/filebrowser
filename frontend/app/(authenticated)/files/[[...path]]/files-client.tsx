@@ -22,6 +22,7 @@ import { SelectionBar } from "@/components/files/selection-bar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
+import { joinPaths } from "@/lib/utils";
 import type { FileItem, FileListingResponse, ViewMode, Sorting } from "@/types";
 
 interface FilesClientProps {
@@ -61,6 +62,7 @@ export default function FilesClient({}: FilesClientProps) {
   const [shareOpen, setShareOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<FileItem | null>(null);
+  const [isPageDragging, setIsPageDragging] = useState(false);
 
   // Fetch data
   const { data, error, isLoading, mutate } = useSWR<FileListingResponse>(
@@ -202,6 +204,123 @@ export default function FilesClient({}: FilesClientProps) {
     window.open(url.toString(), "_blank");
   };
 
+  const handleDropUpload = useCallback(
+    async (filesToUpload: FileList | File[]) => {
+      const files = Array.from(filesToUpload);
+      if (files.length === 0) {
+        return;
+      }
+
+      if (!canCreate) {
+        toast.error("You don't have permission to upload files");
+        return;
+      }
+
+      const token = api.getToken();
+      let completedCount = 0;
+      let errorCount = 0;
+
+      for (const file of files) {
+        const filePath = joinPaths(path, file.name);
+
+        try {
+          const response = await fetch(`/api/resources${filePath}?override=false`, {
+            method: "POST",
+            headers: token ? { "X-Auth": token } : undefined,
+            body: file,
+          });
+
+          if (!response.ok) {
+            throw new Error("Upload failed");
+          }
+
+          completedCount++;
+        } catch {
+          errorCount++;
+        }
+      }
+
+      if (completedCount > 0) {
+        toast.success(`${completedCount} file(s) uploaded successfully`);
+        handleRefresh();
+      }
+
+      if (errorCount > 0) {
+        toast.error(`${errorCount} file(s) failed to upload`);
+      }
+    },
+    [canCreate, path, handleRefresh]
+  );
+
+  useEffect(() => {
+    if (!canCreate) {
+      return;
+    }
+
+    let dragDepth = 0;
+
+    const hasFiles = (event: DragEvent) => {
+      return Array.from(event.dataTransfer?.types || []).includes("Files");
+    };
+
+    const handleDragEnter = (event: DragEvent) => {
+      if (!hasFiles(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      dragDepth += 1;
+      setIsPageDragging(true);
+    };
+
+    const handleDragOver = (event: DragEvent) => {
+      if (!hasFiles(event)) {
+        return;
+      }
+
+      event.preventDefault();
+    };
+
+    const handleDragLeave = (event: DragEvent) => {
+      if (!hasFiles(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      dragDepth = Math.max(0, dragDepth - 1);
+
+      if (dragDepth === 0) {
+        setIsPageDragging(false);
+      }
+    };
+
+    const handleDrop = (event: DragEvent) => {
+      if (!hasFiles(event)) {
+        return;
+      }
+
+      event.preventDefault();
+      dragDepth = 0;
+      setIsPageDragging(false);
+
+      if (event.dataTransfer?.files && event.dataTransfer.files.length > 0) {
+        void handleDropUpload(event.dataTransfer.files);
+      }
+    };
+
+    window.addEventListener("dragenter", handleDragEnter);
+    window.addEventListener("dragover", handleDragOver);
+    window.addEventListener("dragleave", handleDragLeave);
+    window.addEventListener("drop", handleDrop);
+
+    return () => {
+      window.removeEventListener("dragenter", handleDragEnter);
+      window.removeEventListener("dragover", handleDragOver);
+      window.removeEventListener("dragleave", handleDragLeave);
+      window.removeEventListener("drop", handleDrop);
+    };
+  }, [canCreate, handleDropUpload]);
+
   if (error) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4">
@@ -226,8 +345,8 @@ export default function FilesClient({}: FilesClientProps) {
       <Breadcrumbs path={path} />
 
       {selectedItems.length > 0 && (
-        <div className="flex items-center justify-between gap-4 border-b bg-muted/30 px-4 py-2">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 border-b bg-muted/30 px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
             <Checkbox
               id="admin-select-all"
               checked={allSelected}
@@ -244,7 +363,7 @@ export default function FilesClient({}: FilesClientProps) {
           </div>
 
           {canDownload && (
-            <Button size="sm" onClick={handleDownloadSelected}>
+            <Button size="sm" onClick={handleDownloadSelected} className="w-full sm:w-auto">
               <Download className="mr-2 h-4 w-4" />
               {selectedItems.length > 0 ? "Download Selected" : "Download All"}
             </Button>
@@ -268,17 +387,28 @@ export default function FilesClient({}: FilesClientProps) {
         />
       )}
 
-      <SelectionBar
-        selectedCount={selectedItems.length}
-        onClear={() => setSelectedItems([])}
-        onDelete={() => setDeleteOpen(true)}
-        onMove={() => setMoveOpen(true)}
-        onShare={() => setShareOpen(true)}
-        onDownload={handleDownloadSelected}
-        canDelete={canDelete}
-        canShare={canShare}
-        canDownload={canDownload}
-      />
+      {selectedItems.length > 0 && (
+        <SelectionBar
+          selectedCount={selectedItems.length}
+          onClear={() => setSelectedItems([])}
+          onDelete={() => setDeleteOpen(true)}
+          onMove={() => setMoveOpen(true)}
+          onShare={() => setShareOpen(true)}
+          onDownload={handleDownloadSelected}
+          canDelete={canDelete}
+          canShare={canShare}
+          canDownload={canDownload}
+        />
+      )}
+
+      {isPageDragging && canCreate && (
+        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-background/70 p-6 backdrop-blur-sm">
+          <div className="rounded-lg border border-dashed border-primary bg-background px-6 py-8 text-center shadow-lg">
+            <p className="text-sm font-medium">Drop files to upload</p>
+            <p className="mt-1 text-xs text-muted-foreground">Files will be uploaded to this folder</p>
+          </div>
+        </div>
+      )}
 
       {contextMenu && (
         <FileContextMenu
