@@ -72,16 +72,21 @@ export default function FilesClient({}: FilesClientProps) {
   );
 
   // Search handling
-  const searchQuery = searchParams.get("search");
-  const { data: searchResults } = useSWR(
-    searchQuery ? `search:${path}:${searchQuery}` : null,
-    () => api.search(path, searchQuery!),
-    { revalidateOnFocus: false }
+  const searchQuery =
+    searchParams.get("search")?.trim() ||
+    searchParams.get("query")?.trim() ||
+    "";
+  const isSearching = searchQuery.length > 0;
+
+  const { data: searchResults, isLoading: isSearchLoading } = useSWR(
+    isSearching ? `search:${path}:${searchQuery}` : null,
+    () => api.search(path, searchQuery),
+    { revalidateOnFocus: false },
   );
 
   const items = useMemo(
-    () => (searchQuery ? searchResults?.items || [] : data?.items || []),
-    [data?.items, searchQuery, searchResults?.items]
+    () => (isSearching ? searchResults?.items || [] : data?.items || []),
+    [data?.items, searchQuery, searchResults?.items],
   );
 
   // Clear selection on path change
@@ -352,7 +357,10 @@ export default function FilesClient({}: FilesClientProps) {
               checked={allSelected}
               onCheckedChange={(value) => handleSelectAll(Boolean(value))}
             />
-            <label htmlFor="admin-select-all" className="cursor-pointer text-sm">
+            <label
+              htmlFor="admin-select-all"
+              className="cursor-pointer text-sm"
+            >
               Select all
             </label>
             {selectedItems.length > 0 && (
@@ -363,7 +371,11 @@ export default function FilesClient({}: FilesClientProps) {
           </div>
 
           {canDownload && (
-            <Button size="sm" onClick={handleDownloadSelected} className="w-full sm:w-auto">
+            <Button
+              size="sm"
+              onClick={handleDownloadSelected}
+              className="w-full sm:w-auto"
+            >
               <Download className="mr-2 h-4 w-4" />
               {selectedItems.length > 0 ? "Download Selected" : "Download All"}
             </Button>
@@ -371,20 +383,31 @@ export default function FilesClient({}: FilesClientProps) {
         </div>
       )}
 
-      {isLoading ? (
+      {isLoading || (isSearching && isSearchLoading) ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       ) : (
-        <FileList
-          items={items}
-          viewMode={viewMode}
-          sorting={sorting}
-          onContextMenu={handleContextMenu}
-          onPreview={handlePreview}
-          selectedItems={selectedItems}
-          onSelectionChange={setSelectedItems}
-        />
+        <>
+          {isSearching && (
+            <div className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground sm:text-sm">
+              {items.length} result{items.length !== 1 ? "s" : ""} for "
+              {searchQuery}" in {path}
+            </div>
+          )}
+
+          <FileList
+            items={items}
+            viewMode={viewMode}
+            sorting={sorting}
+            onContextMenu={handleContextMenu}
+            onPreview={handlePreview}
+            selectedItems={selectedItems}
+            onSelectionChange={setSelectedItems}
+            isSearching={isSearching}
+            searchRootPath={path}
+          />
+        </>
       )}
 
       {selectedItems.length > 0 && (
@@ -405,7 +428,9 @@ export default function FilesClient({}: FilesClientProps) {
         <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-background/70 p-6 backdrop-blur-sm">
           <div className="rounded-lg border border-dashed border-primary bg-background px-6 py-8 text-center shadow-lg">
             <p className="text-sm font-medium">Drop files to upload</p>
-            <p className="mt-1 text-xs text-muted-foreground">Files will be uploaded to this folder</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Files will be uploaded to this folder
+            </p>
           </div>
         </div>
       )}
@@ -424,14 +449,16 @@ export default function FilesClient({}: FilesClientProps) {
             }
             closeContextMenu();
           }}
-          onDownload={() => window.open(api.getDownloadUrl(contextMenu.item.path), "_blank")}
+          onDownload={() =>
+            window.open(api.getDownloadUrl(contextMenu.item.path), "_blank")
+          }
           onRename={() => setRenameOpen(true)}
           onDelete={() => setDeleteOpen(true)}
           onShare={() => setShareOpen(true)}
           onCopy={() => {
-            navigator.clipboard.writeText(contextMenu.item.path).then(() =>
-              toast.success("Path copied to clipboard")
-            );
+            navigator.clipboard
+              .writeText(contextMenu.item.path)
+              .then(() => toast.success("Path copied to clipboard"));
           }}
           canRename={canRename}
           canDelete={canDelete}

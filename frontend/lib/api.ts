@@ -12,11 +12,26 @@ import type {
   ApiError,
   DeepPartial,
 } from "@/types";
+import { getFileExtension, getFileName, getFileType } from "@/lib/utils";
 
 const API_BASE = "/api";
 
 class ApiClient {
   private token: string | null = null;
+
+  private toAbsoluteSearchPath(scope: string, itemPath: string): string {
+    if (!itemPath) {
+      return scope || "/";
+    }
+
+    if (itemPath.startsWith("/")) {
+      return itemPath;
+    }
+
+    const cleanScope = scope && scope !== "/" ? scope.replace(/\/+$/, "") : "";
+    const combinedPath = cleanScope ? `${cleanScope}/${itemPath}` : `/${itemPath}`;
+    return combinedPath.startsWith("/") ? combinedPath : `/${combinedPath}`;
+  }
 
   private normalizeAuthResponse(response: AuthResponse | string): AuthResponse {
     if (typeof response === "string") {
@@ -186,7 +201,58 @@ class ApiClient {
   // Search
   async search(path: string, query: string): Promise<SearchResult> {
     const params = new URLSearchParams({ query });
-    return this.request<SearchResult>(`/search${path}?${params.toString()}`);
+    const headers: HeadersInit = {};
+
+    if (this.token) {
+      (headers as Record<string, string>)["X-Auth"] = this.token;
+    }
+
+    const response = await fetch(`${API_BASE}/search${path}?${params.toString()}`, {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      throw {
+        message: response.statusText || "Search failed",
+        status: response.status,
+      } as ApiError;
+    }
+
+    const text = await response.text();
+    const lines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const items = lines
+      .map((line) => {
+        try {
+          return JSON.parse(line) as { path?: string; dir?: boolean };
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry): entry is { path: string; dir?: boolean } => Boolean(entry?.path))
+      .map((entry) => {
+        const absolutePath = this.toAbsoluteSearchPath(path, entry.path);
+        const name = getFileName(absolutePath);
+        const isDir = Boolean(entry.dir);
+
+        return {
+          path: absolutePath,
+          name,
+          size: 0,
+          extension: getFileExtension(name),
+          modified: new Date(0).toISOString(),
+          mode: 0,
+          isDir,
+          isSymlink: false,
+          type: getFileType(name, isDir),
+        };
+      });
+
+    return { items };
   }
 
   // Shares

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Search,
   Upload,
@@ -50,35 +50,70 @@ export function Header({
   canCreate = true,
 }: HeaderProps) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    const currentSearch =
+      searchParams.get("search") ?? searchParams.get("query") ?? "";
+    setSearchQuery(currentSearch);
+  }, [searchParams]);
+
+  useEffect(() => {
+    const currentSearch =
+      (searchParams.get("search") ?? searchParams.get("query") ?? "").trim();
+    const normalizedSearch = searchQuery.trim();
+
+    if (normalizedSearch === currentSearch) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      if (!normalizedSearch) {
+        navigate(`/files${path}`, { replace: true });
+        return;
+      }
+
+      navigate(`/files${path}?search=${encodeURIComponent(normalizedSearch)}`, {
+        replace: true,
+      });
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
+  }, [navigate, path, searchParams, searchQuery]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/files${path}?search=${encodeURIComponent(searchQuery.trim())}`);
+    const normalizedSearch = searchQuery.trim();
+
+    if (!normalizedSearch) {
+      navigate(`/files${path}`);
+      return;
     }
+
+    navigate(`/files${path}?search=${encodeURIComponent(normalizedSearch)}`);
   };
 
 
   return (
     <TooltipProvider delayDuration={300}>
-      <header className="flex h-14 items-center justify-between gap-4 border-b bg-background px-4">
+      <header className="flex flex-col gap-2 border-b bg-background px-3 py-2 sm:h-14 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:px-4 sm:py-0">
         {/* Search */}
-        <form onSubmit={handleSearch} className="flex flex-1 items-center gap-2">
-          <div className="relative flex-1 max-w-md">
+        <form onSubmit={handleSearch} className="flex w-full min-w-0 flex-1 items-center gap-2">
+          <div className="relative min-w-0 flex-1 sm:max-w-md">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Search files..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9"
+              className="h-9 pl-9"
             />
           </div>
         </form>
 
         {/* Actions */}
-        <div className="flex items-center gap-1">
+        <div className="flex w-full items-center justify-between gap-1 sm:w-auto sm:justify-end">
           {canCreate && (
             <>
               <Tooltip>
@@ -115,7 +150,7 @@ export function Header({
             </>
           )}
 
-          <div className="mx-2 h-6 w-px bg-border" />
+          <div className="mx-1 h-6 w-px bg-border sm:mx-2" />
 
           {/* View Mode Toggle */}
           <div className="flex items-center rounded-md border bg-muted p-1">
@@ -156,7 +191,7 @@ export function Header({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={onRefresh}>
+              <Button variant="ghost" size="icon" onClick={onRefresh} className="shrink-0">
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </TooltipTrigger>

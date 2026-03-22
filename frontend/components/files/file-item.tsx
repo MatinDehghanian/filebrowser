@@ -2,6 +2,7 @@
 
 import { formatBytes, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { getParentPath } from "@/lib/utils";
 import { FileIcon } from "./file-icon";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { FileItem as FileItemType, ViewMode } from "@/types";
@@ -14,6 +15,8 @@ interface FileItemProps {
   onToggleSelect: (item: FileItemType, checked: boolean) => void;
   onOpen: (item: FileItemType) => void;
   onContextMenu: (item: FileItemType, event: React.MouseEvent) => void;
+  showParentPath?: boolean;
+  searchRootPath?: string;
 }
 
 export function FileItem({
@@ -24,7 +27,26 @@ export function FileItem({
   onToggleSelect,
   onOpen,
   onContextMenu,
+  showParentPath = false,
+  searchRootPath = "/",
 }: FileItemProps) {
+  const getDisplayParentPath = () => {
+    const parentPath = getParentPath(item.path);
+    const normalizedRoot =
+      searchRootPath && searchRootPath !== "/"
+        ? searchRootPath.replace(/\/+$/, "")
+        : "";
+
+    if (normalizedRoot && parentPath.startsWith(normalizedRoot)) {
+      const relativeParent = parentPath.slice(normalizedRoot.length);
+      return relativeParent.startsWith("/") ? relativeParent : `/${relativeParent}`;
+    }
+
+    return parentPath || "/";
+  };
+
+  const parentPath = getDisplayParentPath();
+
   const handleClick = (e: React.MouseEvent) => {
     if (e.detail === 2) {
       // Double click - open
@@ -67,6 +89,9 @@ export function FileItem({
         
         <div className="flex-1 min-w-0">
           <p className="truncate font-medium">{item.name}</p>
+          {showParentPath && (
+            <p className="truncate text-xs text-muted-foreground">{parentPath}</p>
+          )}
         </div>
         
         <div className="hidden sm:block w-24 text-right text-sm text-muted-foreground">
@@ -108,6 +133,9 @@ export function FileItem({
       
       <div className="w-full text-center">
         <p className="truncate text-sm font-medium">{item.name}</p>
+        {showParentPath && (
+          <p className="truncate text-[11px] text-muted-foreground">{parentPath}</p>
+        )}
         <p className="text-xs text-muted-foreground">
           {item.isDir ? "Folder" : formatBytes(item.size)}
         </p>

@@ -15,6 +15,8 @@ interface FileListProps {
   onPreview: (item: FileItemType) => void;
   selectedItems: FileItemType[];
   onSelectionChange: (items: FileItemType[]) => void;
+  isSearching?: boolean;
+  searchRootPath?: string;
 }
 
 export function FileList({
@@ -25,6 +27,8 @@ export function FileList({
   onPreview,
   selectedItems,
   onSelectionChange,
+  isSearching = false,
+  searchRootPath = "/",
 }: FileListProps) {
   const navigate = useNavigate();
 
@@ -158,6 +162,8 @@ export function FileList({
                 key={item.path}
                 item={item}
                 viewMode={viewMode}
+                showParentPath={isSearching}
+                searchRootPath={searchRootPath}
                 selected={isSelected(item)}
                 onSelect={handleSelect}
                 onToggleSelect={handleToggleSelect}
@@ -181,6 +187,8 @@ export function FileList({
               key={item.path}
               item={item}
               viewMode={viewMode}
+              showParentPath={isSearching}
+              searchRootPath={searchRootPath}
               selected={isSelected(item)}
               onSelect={handleSelect}
               onToggleSelect={handleToggleSelect}
