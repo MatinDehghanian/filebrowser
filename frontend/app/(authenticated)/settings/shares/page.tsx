@@ -178,7 +178,7 @@ export default function SharesSettingsPage() {
                     <TableRow key={share.hash}>
                       <TableCell>
                         <Link
-                          href={`/files${share.path}`}
+                          to={`/files${share.path}`}
                           className="flex items-center gap-2 text-sm hover:underline"
                         >
                           {isDir ? (

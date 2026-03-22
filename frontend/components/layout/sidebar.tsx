@@ -65,7 +65,7 @@ export function Sidebar() {
 
     const linkContent = (
       <Link
-        href={item.href}
+        to={item.href}
         className={cn(
           "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
           isActive
@@ -101,7 +101,7 @@ export function Sidebar() {
         {/* Header */}
         <div className="flex h-14 items-center justify-between border-b px-4">
           {!collapsed && (
-            <Link href="/files/" className="flex items-center gap-2">
+            <Link to="/files/" className="flex items-center gap-2">
               <FolderOpen className="h-6 w-6 text-primary" />
               <span className="font-semibold">File Browser</span>
             </Link>
