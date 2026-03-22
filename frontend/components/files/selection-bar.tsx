@@ -32,7 +32,7 @@ export function SelectionBar({
 
   return (
     <div className="fixed bottom-3 left-2 right-2 z-50 sm:bottom-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2">
-      <div className="flex items-center gap-1 overflow-x-auto rounded-lg border bg-background/95 px-2 py-2 shadow-lg backdrop-blur sm:gap-2 sm:px-4">
+      <div className="flex justify-around items-center gap-1 overflow-x-auto rounded-lg border bg-background/95 px-2 py-2 shadow-lg backdrop-blur sm:gap-2 sm:px-4">
         <span className="shrink-0 text-xs font-medium sm:text-sm">
           {selectedCount} item{selectedCount !== 1 ? "s" : ""} selected
         </span>
