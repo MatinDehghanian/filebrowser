@@ -84,6 +84,7 @@ export default function UsersSettingsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
+  const [deleteCurrentPassword, setDeleteCurrentPassword] = useState("");
   const [formData, setFormData] = useState<UserFormData>(INITIAL_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -176,8 +177,15 @@ export default function UsersSettingsPage() {
   const handleDelete = async () => {
     if (!deleteUser) return;
 
+    if (!deleteCurrentPassword) {
+      toast.error("Your current password is required");
+      return;
+    }
+
     try {
-      await api.deleteUser(deleteUser.id);
+      await api.deleteUser(deleteUser.id, {
+        currentPassword: deleteCurrentPassword,
+      });
       toast.success("User deleted successfully");
       mutate();
     } catch (error) {
@@ -186,6 +194,7 @@ export default function UsersSettingsPage() {
       );
     } finally {
       setDeleteUser(null);
+      setDeleteCurrentPassword("");
     }
   };
 
@@ -483,7 +492,15 @@ export default function UsersSettingsPage() {
       </Dialog>
 
       {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
+      <AlertDialog
+        open={!!deleteUser}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteUser(null);
+            setDeleteCurrentPassword("");
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete User</AlertDialogTitle>
@@ -492,6 +509,16 @@ export default function UsersSettingsPage() {
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="delete-current-password">Your Current Password</Label>
+            <Input
+              id="delete-current-password"
+              type="password"
+              value={deleteCurrentPassword}
+              onChange={(event) => setDeleteCurrentPassword(event.target.value)}
+              placeholder="Required to confirm deletion"
+            />
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction

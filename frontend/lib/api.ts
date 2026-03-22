@@ -65,7 +65,11 @@ class ApiClient {
       (headers as Record<string, string>)["X-Auth"] = this.token;
     }
 
-    if (options.body && typeof options.body === "string") {
+    const hasContentTypeHeader = Object.keys(headers as Record<string, string>).some(
+      (key) => key.toLowerCase() === "content-type"
+    );
+
+    if (options.body && typeof options.body === "string" && !hasContentTypeHeader) {
       (headers as Record<string, string>)["Content-Type"] = "application/json";
     }
 
@@ -194,8 +198,7 @@ class ApiClient {
   getPreviewUrl(path: string, size: "thumb" | "big" = "thumb"): string {
     const params = new URLSearchParams();
     if (this.token) params.set("auth", this.token);
-    params.set("size", size);
-    return `${API_BASE}/preview${path}?${params.toString()}`;
+    return `${API_BASE}/preview/${size}${path}?${params.toString()}`;
   }
 
   // Search
@@ -372,9 +375,15 @@ class ApiClient {
     return this.getUser(id);
   }
 
-  async deleteUser(id: number): Promise<void> {
-    return this.request(`/users/${id}`, {
+  async deleteUser(
+    id: number,
+    options?: { currentPassword?: string },
+  ): Promise<void> {
+    return this.request<void>(`/users/${id}`, {
       method: "DELETE",
+      body: JSON.stringify({
+        current_password: options?.currentPassword,
+      }),
     });
   }
 
@@ -401,12 +410,28 @@ class ApiClient {
 
   // Commands
   async runCommand(path: string, command: string): Promise<string> {
-    return this.request(`/command${path}`, {
-      method: "POST",
-      body: command,
-      headers: {
-        "Content-Type": "text/plain",
-      },
+    return new Promise<string>((resolve, reject) => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${protocol}//${window.location.host}${API_BASE}/command${path}`);
+      const output: string[] = [];
+
+      ws.onopen = () => {
+        ws.send(command);
+      };
+
+      ws.onmessage = (event) => {
+        if (typeof event.data === "string") {
+          output.push(event.data);
+        }
+      };
+
+      ws.onerror = () => {
+        reject(new Error("Command execution failed"));
+      };
+
+      ws.onclose = () => {
+        resolve(output.join("\n").trim());
+      };
     });
   }
 
@@ -415,7 +440,7 @@ class ApiClient {
     path: string,
     algo = "md5",
   ): Promise<Record<string, string>> {
-    return this.request(`/checksum${path}?algo=${algo}`);
+    return this.request(`/resources${path}?checksum=${algo}`);
   }
 }
 
