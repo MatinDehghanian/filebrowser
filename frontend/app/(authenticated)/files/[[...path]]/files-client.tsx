@@ -458,7 +458,8 @@ export default function FilesClient({}: FilesClientProps) {
           onCopy={() => {
             navigator.clipboard
               .writeText(contextMenu.item.path)
-              .then(() => toast.success("Path copied to clipboard"));
+              .then(() => toast.success("Path copied to clipboard"))
+              .catch(() => toast.error("Failed to copy path"));
           }}
           canRename={canRename}
           canDelete={canDelete}

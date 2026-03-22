@@ -9,6 +9,7 @@ import {
   Maximize2,
   Minimize2,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -59,8 +60,11 @@ export function PreviewDialog({
         .then((content) => {
           setTextContent(content);
         })
-        .catch(() => {
-          setTextContent("Failed to load file content");
+        .catch((error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to load file content"
+          );
+          setTextContent(null);
         })
         .finally(() => {
           setIsLoading(false);
@@ -103,6 +107,7 @@ export function PreviewDialog({
   const handleDownload = () => {
     if (item) {
       window.open(api.getDownloadUrl(item.path), "_blank");
+      toast.success(`"${item.name}" download started`);
     }
   };
 

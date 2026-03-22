@@ -71,8 +71,10 @@ export default function SharesSettingsPage() {
 
   const copyShareLink = (hash: string) => {
     const url = `${window.location.origin}/share/${hash}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Link copied to clipboard");
+    navigator.clipboard
+      .writeText(url)
+      .then(() => toast.success("Link copied to clipboard"))
+      .catch(() => toast.error("Failed to copy link"));
   };
 
   const copyDirectDownloadLink = (share: Share) => {
@@ -84,8 +86,10 @@ export default function SharesSettingsPage() {
 
     const downloadPath = api.getPublicDownloadUrl(share.hash, "", false, share.token);
     const url = `${window.location.origin}${downloadPath}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Direct download link copied");
+    navigator.clipboard
+      .writeText(url)
+      .then(() => toast.success("Direct download link copied"))
+      .catch(() => toast.error("Failed to copy link"));
   };
 
   const getExpiryStatus = (share: Share) => {

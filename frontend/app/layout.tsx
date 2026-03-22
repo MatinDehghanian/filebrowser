@@ -1,6 +1,5 @@
 import { AuthProvider } from "@/contexts/auth-context";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 export default function AppProviders({
@@ -15,10 +14,7 @@ export default function AppProviders({
       enableSystem
       disableTransitionOnChange
     >
-      <AuthProvider>
-        {children}
-        <Toaster />
-      </AuthProvider>
+      <AuthProvider>{children}</AuthProvider>
     </ThemeProvider>
   );
 }
