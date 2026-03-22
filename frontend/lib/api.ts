@@ -335,11 +335,15 @@ class ApiClient {
     return this.request<User>(`/users/${id}`);
   }
 
-  async createUser(user: Partial<User>): Promise<void> {
+  async createUser(
+    user: Partial<User>,
+    options?: { currentPassword?: string },
+  ): Promise<void> {
     await this.request<void>("/users", {
       method: "POST",
       body: JSON.stringify({
         what: "user",
+        current_password: options?.currentPassword,
         data: user,
       }),
     });

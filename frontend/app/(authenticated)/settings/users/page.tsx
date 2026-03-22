@@ -61,6 +61,7 @@ const DEFAULT_PERMISSIONS: Permissions = {
 interface UserFormData {
   username: string;
   password: string;
+  currentPassword: string;
   scope: string;
   perm: Permissions;
   lockPassword: boolean;
@@ -69,6 +70,7 @@ interface UserFormData {
 const INITIAL_FORM: UserFormData = {
   username: "",
   password: "",
+  currentPassword: "",
   scope: "/",
   perm: DEFAULT_PERMISSIONS,
   lockPassword: false,
@@ -129,6 +131,11 @@ export default function UsersSettingsPage() {
       return;
     }
 
+    if (!formData.currentPassword) {
+      toast.error("Your current password is required");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -144,10 +151,14 @@ export default function UsersSettingsPage() {
       }
 
       if (editingUser) {
-        await api.updateUser(editingUser.id, userData);
+        await api.updateUser(editingUser.id, userData, {
+          currentPassword: formData.currentPassword,
+        });
         toast.success("User updated successfully");
       } else {
-        await api.createUser(userData);
+        await api.createUser(userData, {
+          currentPassword: formData.currentPassword,
+        });
         toast.success("User created successfully");
       }
 
@@ -332,6 +343,25 @@ export default function UsersSettingsPage() {
                   setFormData((prev) => ({ ...prev, password: e.target.value }))
                 }
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Your Current Password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                value={formData.currentPassword}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    currentPassword: e.target.value,
+                  }))
+                }
+                placeholder="Required for creating/updating users"
+              />
+              <p className="text-xs text-muted-foreground">
+                Enter your own admin password to confirm this action.
+              </p>
             </div>
 
             <div className="space-y-2">
