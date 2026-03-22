@@ -104,6 +104,7 @@ export default function UsersSettingsPage() {
       setFormData({
         username: user.username,
         password: "",
+        currentPassword: "",
         scope: user.scope,
         perm: user.perm,
         lockPassword: user.lockPassword,
