@@ -134,3 +134,30 @@
 .drop-zone-active {
   @apply border-primary bg-primary/5;
 }
+
+/* The preview workspace keeps toolbars fixed while each document scrolls. */
+.image-preview-canvas {
+  background-color: hsl(var(--muted) / 0.25);
+  background-image: linear-gradient(45deg, hsl(var(--muted-foreground) / 0.07) 25%, transparent 25%), linear-gradient(-45deg, hsl(var(--muted-foreground) / 0.07) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, hsl(var(--muted-foreground) / 0.07) 75%), linear-gradient(-45deg, transparent 75%, hsl(var(--muted-foreground) / 0.07) 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+}
+.markdown-preview { line-height: 1.8; overflow-wrap: anywhere; }
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3, .markdown-preview h4 { font-weight: 650; line-height: 1.35; margin: 1.6em 0 0.7em; }
+.markdown-preview h1 { font-size: 2em; border-bottom: 1px solid hsl(var(--border)); padding-bottom: 0.3em; }
+.markdown-preview h2 { font-size: 1.5em; }
+.markdown-preview h3 { font-size: 1.25em; }
+.markdown-preview p, .markdown-preview ul, .markdown-preview ol, .markdown-preview blockquote { margin: 1em 0; }
+.markdown-preview ul { list-style: disc; padding-left: 1.6em; }
+.markdown-preview ol { list-style: decimal; padding-left: 1.6em; }
+.markdown-preview ul.contains-task-list { list-style: none; padding-left: 0; }
+.markdown-preview a { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 3px; }
+.markdown-preview blockquote { border-left: 3px solid hsl(var(--primary) / 0.6); color: hsl(var(--muted-foreground)); padding: 0.2em 1em; background: hsl(var(--muted) / 0.4); }
+.markdown-preview pre { overflow: auto; padding: 1rem; border: 1px solid hsl(var(--border)); border-radius: 0.6rem; background: hsl(var(--muted) / 0.6); font-size: 0.85em; }
+.markdown-preview :not(pre) > code { background: hsl(var(--muted)); padding: 0.1em 0.35em; border-radius: 0.25em; font-size: 0.9em; }
+.markdown-preview code { font-family: var(--font-geist-mono); }
+.markdown-preview table { border-collapse: collapse; display: block; overflow: auto; width: 100%; }
+.markdown-preview th, .markdown-preview td { border: 1px solid hsl(var(--border)); padding: 0.5em 0.9em; }
+.markdown-preview th { background: hsl(var(--muted)); text-align: left; }
+.markdown-preview hr { margin: 2em 0; border-color: hsl(var(--border)); }
+.markdown-preview input[type=checkbox] { margin-right: 0.5em; }

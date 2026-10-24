@@ -532,6 +532,8 @@ export default function FilesClient({}: FilesClientProps) {
         items={items.filter((item) => !item.isDir)}
         onNavigate={(item) => setPreviewItem(item)}
         canEdit={canModify}
+        canDownload={canDownload}
+        onSaved={handleRefresh}
       />
     </div>
   );

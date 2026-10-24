@@ -8,3 +8,5 @@ out/
 !out/.gitkeep
 !out/placeholder.txt
 !out/
+# PDF runtime files are copied from the pinned package before dev/build.
+/public/pdfjs/

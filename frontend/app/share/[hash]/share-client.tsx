@@ -1,15 +1,7 @@
 "use client";
 
-import { useCallback, useState, useEffect } from "react";
-import {
-  Download,
-  FolderOpen,
-  Eye,
-  EyeOff,
-  FileText,
-  X,
-  QrCode,
-} from "lucide-react";
+import { useCallback, useState, useEffect, useRef } from "react";
+import { Download, FolderOpen, Eye, EyeOff, X, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,15 +14,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
+  DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FileIcon } from "@/components/files/file-icon";
 import { ShareQrDialog } from "@/components/share/share-qr-dialog";
+import { FilePreview } from "@/components/preview/file-preview";
+import { previewKind, readPreviewText } from "@/lib/preview";
 import { formatBytes, formatDate, getFileType } from "@/lib/utils";
 import api from "@/lib/api";
 import type { FileItem, FileListingResponse } from "@/types";
@@ -48,99 +41,60 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
   const [error, setError] = useState<string | null>(null);
   const [needsPassword, setNeedsPassword] = useState(false);
   const [password, setPassword] = useState("");
-  const [sharePassword, setSharePassword] = useState("");
+  const sharePassword = useRef("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [data, setData] = useState<FileItem | FileListingResponse | null>(null);
   const [currentPath, setCurrentPath] = useState("");
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<FileItem | null>(null);
-  const [previewText, setPreviewText] = useState<string>("");
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isShareQrOpen, setIsShareQrOpen] = useState(false);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
 
-  const isTextLikeFile = (item: FileItem) => {
-    if (item.isDir) {
-      return false;
-    }
+  const fetchShare = useCallback(
+    async (path = "", pwd?: string) => {
+      setIsLoading(true);
+      setError(null);
+      const effectivePassword = pwd ?? sharePassword.current;
 
-    const fileType = getFileType(item.name, item.isDir);
-    const lowerName = item.name.toLowerCase();
-    const mimeType = (item.type || "").toLowerCase();
-
-    if (fileType === "code") {
-      return true;
-    }
-
-    if (
-      mimeType.startsWith("text/") ||
-      mimeType.includes("json") ||
-      mimeType.includes("xml") ||
-      mimeType.includes("yaml") ||
-      mimeType.includes("javascript") ||
-      mimeType.includes("typescript") ||
-      mimeType.includes("shell")
-    ) {
-      return true;
-    }
-
-    if (
-      lowerName === "dockerfile" ||
-      lowerName === "makefile" ||
-      lowerName.endsWith(".txt") ||
-      lowerName.endsWith(".log") ||
-      lowerName.endsWith(".conf") ||
-      lowerName.endsWith(".ini") ||
-      lowerName.endsWith(".toml") ||
-      lowerName.endsWith(".env")
-    ) {
-      return true;
-    }
-
-    return false;
-  };
-
-  const fetchShare = useCallback(async (path = "", pwd?: string) => {
-    setIsLoading(true);
-    setError(null);
-    const effectivePassword = pwd ?? sharePassword;
-
-    try {
-      const result = await api.getPublicShare(
-        hash,
-        path,
-        effectivePassword || undefined,
-      );
-      setData(result);
-      setCurrentPath(path);
-      setSelectedPaths([]);
-      setNeedsPassword(false);
-      if (effectivePassword) {
-        setSharePassword(effectivePassword);
-      }
-    } catch (err) {
-      const apiError = err as { status?: number; message?: string };
-      const message =
-        apiError?.message ?? (err instanceof Error ? err.message : "");
-
-      if (
-        apiError?.status === 401 ||
-        message.includes("password") ||
-        message.includes("401") ||
-        message.includes("Unauthorized")
-      ) {
-        if (pwd) {
-          setSharePassword("");
+      try {
+        const result = await api.getPublicShare(
+          hash,
+          path,
+          effectivePassword || undefined,
+        );
+        setData(result);
+        setCurrentPath(path);
+        setSelectedPaths([]);
+        setNeedsPassword(false);
+        if (effectivePassword) {
+          sharePassword.current = effectivePassword;
         }
-        setNeedsPassword(true);
-      } else {
-        setError(message || "Failed to load share");
+      } catch (err) {
+        const apiError = err as { status?: number; message?: string };
+        const message =
+          apiError?.message ?? (err instanceof Error ? err.message : "");
+
+        if (
+          apiError?.status === 401 ||
+          message.includes("password") ||
+          message.includes("401") ||
+          message.includes("Unauthorized")
+        ) {
+          if (pwd) {
+            sharePassword.current = "";
+            toast.error("Incorrect share password");
+          }
+          setNeedsPassword(true);
+        } else {
+          setError(message || "Failed to load share");
+        }
+      } finally {
+        setIsLoading(false);
       }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [hash, sharePassword]);
+    },
+    [hash],
+  );
 
   useEffect(() => {
     if (hash !== PLACEHOLDER_HASH) {
@@ -167,58 +121,6 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
 
     fetchShare();
   }, [fetchShare, hash]);
-
-  useEffect(() => {
-    const modalPreviewItem = isPreviewOpen ? previewItem : null;
-    const singleFilePreviewItem =
-      data &&
-      !(
-        "items" in data && Array.isArray((data as FileListingResponse).items)
-      ) &&
-      !(data as FileItem).isDir
-        ? (data as FileItem)
-        : null;
-
-    const activePreviewItem = modalPreviewItem ?? singleFilePreviewItem;
-
-    if (!activePreviewItem) {
-      setPreviewText("");
-      setIsPreviewLoading(false);
-      return;
-    }
-
-    if (!isTextLikeFile(activePreviewItem)) {
-      setPreviewText("");
-      setIsPreviewLoading(false);
-      return;
-    }
-
-    const token =
-      activePreviewItem.token || (data as { token?: string })?.token;
-    const contentUrl = api.getPublicDownloadUrl(
-      hash,
-      activePreviewItem.path,
-      true,
-      token,
-    );
-    const abortController = new AbortController();
-
-    setIsPreviewLoading(true);
-    fetch(contentUrl, { signal: abortController.signal })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error("Failed to load file preview");
-        }
-        return res.text();
-      })
-      .then((text) => setPreviewText(text))
-      .catch(() => setPreviewText("Failed to load file preview"))
-      .finally(() => setIsPreviewLoading(false));
-
-    return () => {
-      abortController.abort();
-    };
-  }, [previewItem, isPreviewOpen, hash, data]);
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,17 +169,7 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
       return;
     }
 
-    if (item.type?.startsWith("image")) {
-      openPreview(item);
-      return;
-    }
-
-    if (isTextLikeFile(item)) {
-      openPreview(item);
-      return;
-    }
-
-    handleDownload(item.path, item);
+    openPreview(item);
   };
 
   const handleBack = () => {
@@ -296,43 +188,33 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
   };
 
   const handleBulkDownload = () => {
-    if (!selectedPaths.length) {
-      return;
-    }
-
-    selectedPaths.forEach((path) => handleDownload(path));
-  };
-
-  const renderPreview = (item: FileItem | null) => {
-    if (!item) {
-      return null;
-    }
-
-    if (item.type?.startsWith("image")) {
-      return (
-        <img
-          src={getInlineUrl(item)}
-          alt={item.name}
-          className="max-h-[70vh] w-full object-contain"
-        />
-      );
-    }
-
-    if (isTextLikeFile(item)) {
-      return (
-        <ScrollArea className="max-h-[70vh] rounded-md border p-4">
-          <pre className="whitespace-pre-wrap text-sm">{previewText}</pre>
-        </ScrollArea>
-      );
-    }
-
-    return (
-      <div className="flex flex-col items-center gap-4 py-10 text-center">
-        <FileText className="h-12 w-12 text-muted-foreground" />
-        <p>This file type cannot be previewed.</p>
-      </div>
+    if (!selectedPaths.length) return;
+    const url = new URL(
+      api.getPublicDownloadUrl(hash, currentPath, false, getShareToken()),
+      window.location.origin,
     );
+    const prefix = currentPath.replace(/\/+$/, "");
+    url.searchParams.set(
+      "files",
+      selectedPaths
+        .map((path) => encodeURIComponent(path.slice(prefix.length)))
+        .join(","),
+    );
+    window.open(url.toString(), "_blank");
   };
+
+  const renderPreview = (item: FileItem | null) =>
+    item ? (
+      <FilePreview
+        key={item.path}
+        item={item}
+        url={getInlineUrl(item)}
+        canDownload={true}
+        loadText={async (signal) =>
+          readPreviewText(await fetch(getInlineUrl(item), { signal }))
+        }
+      />
+    ) : null;
 
   if (isLoading) {
     return (
@@ -409,16 +291,16 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
 
   const listing = "items" in data ? (data as FileListingResponse) : null;
   const file = listing ? null : (data as FileItem);
-  const canInlinePreview =
-    !!file &&
-    (file.type?.startsWith("image") || isTextLikeFile(file));
+  const canInlinePreview = !!file && previewKind(file) !== "unsupported";
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-6 py-6 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            <p className="text-sm text-muted-foreground">Shared via File Browser</p>
+            <p className="text-sm text-muted-foreground">
+              Shared via File Browser
+            </p>
             <h1 className="text-2xl font-semibold">
               {listing?.name ?? file?.name ?? "Shared file"}
             </h1>
@@ -525,14 +407,8 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
               </Button>
             </div>
             {canInlinePreview && (
-              <div className="mt-6">
-                {isPreviewLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                  </div>
-                ) : (
-                  renderPreview(file)
-                )}
+              <div className="mt-6 h-[70dvh] min-h-[420px] overflow-hidden rounded-lg border">
+                {renderPreview(file)}
               </div>
             )}
           </div>
@@ -540,24 +416,41 @@ export default function ShareClient({ initialHash }: ShareClientProps) {
       </main>
 
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader className="flex items-center justify-between gap-4">
-            <DialogTitle>{previewItem?.name ?? "Preview"}</DialogTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsPreviewOpen(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </DialogHeader>
-          {isPreviewLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <DialogContent
+          showClose={false}
+          className="flex h-[92dvh] w-[96vw] max-w-7xl flex-col gap-0 overflow-hidden p-0"
+        >
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
+            <DialogTitle className="min-w-0 truncate text-sm">
+              {previewItem?.name ?? "Preview"}
+            </DialogTitle>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  previewItem && handleDownload(previewItem.path, previewItem)
+                }
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download original
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Close shared preview"
+                onClick={() => setIsPreviewOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-          ) : (
-            renderPreview(previewItem)
-          )}
+          </div>
+          <DialogDescription className="sr-only">
+            Read-only preview of {previewItem?.name || "the shared file"}.
+          </DialogDescription>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {renderPreview(previewItem)}
+          </div>
         </DialogContent>
       </Dialog>
 

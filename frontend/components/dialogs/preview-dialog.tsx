@@ -1,24 +1,25 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  X,
-  Download,
   ChevronLeft,
   ChevronRight,
+  Download,
+  File,
   Maximize2,
   Minimize2,
-  Save,
+  X,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn, formatBytes, getFileType } from "@/lib/utils";
+import { FilePreview } from "@/components/preview/file-preview";
+import { previewKind } from "@/lib/preview";
+import { cn, formatBytes } from "@/lib/utils";
 import api from "@/lib/api";
 import type { FileItem } from "@/types";
 
@@ -29,8 +30,9 @@ interface PreviewDialogProps {
   items: FileItem[];
   onNavigate: (item: FileItem) => void;
   canEdit: boolean;
+  canDownload: boolean;
+  onSaved?: () => void;
 }
-
 export function PreviewDialog({
   open,
   onOpenChange,
@@ -38,294 +40,134 @@ export function PreviewDialog({
   items,
   onNavigate,
   canEdit,
+  canDownload,
+  onSaved,
 }: PreviewDialogProps) {
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [textContent, setTextContent] = useState<string | null>(null);
-  const [editedContent, setEditedContent] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  const currentIndex = item ? items.findIndex((i) => i.path === item.path) : -1;
-  const canGoPrev = currentIndex > 0;
-  const canGoNext = currentIndex < items.length - 1;
-
-  const fileType = item ? getFileType(item.name, item.isDir) : null;
-  const canEditCurrentFile = Boolean(item && canEdit && fileType === "code");
-
+  const [fullscreen, setFullscreen] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [displaySize, setDisplaySize] = useState(item?.size || 0);
+  useEffect(() => setDisplaySize(item?.size || 0), [item?.path]);
+  const state = useRef({ dirty, busy });
+  state.current = { dirty, busy };
+  const currentIndex = item
+    ? items.findIndex((entry) => entry.path === item.path)
+    : -1;
+  const canLeave = useCallback(
+    () =>
+      !state.current.busy &&
+      (!state.current.dirty ||
+        window.confirm("Discard unsaved changes before leaving this file?")),
+    [],
+  );
+  const changeOpen = (next: boolean) => {
+    if (next || canLeave()) onOpenChange(next);
+  };
+  const move = useCallback(
+    (direction: number) => {
+      const next = currentIndex + direction;
+      if (currentIndex >= 0 && next >= 0 && next < items.length && canLeave())
+        onNavigate(items[next]);
+    },
+    [currentIndex, items, onNavigate, canLeave],
+  );
   useEffect(() => {
     if (!open) {
-      setEditedContent("");
-      setIsSaving(false);
+      setFullscreen(false);
+      setDirty(false);
+      setBusy(false);
     }
   }, [open]);
-
-  // Load text content for code/text files
-  useEffect(() => {
-    if (!item || !open) {
-      setTextContent(null);
-      return;
-    }
-
-    if (fileType === "code" || item.type === "text") {
-      setIsLoading(true);
-      api
-        .getFileContent(item.path)
-        .then((content) => {
-          setTextContent(content);
-          setEditedContent(content);
-        })
-        .catch((error) => {
-          toast.error(
-            error instanceof Error ? error.message : "Failed to load file content"
-          );
-          setTextContent(null);
-          setEditedContent("");
-        })
-        .finally(() => {
-          setIsLoading(false);
-        });
-    }
-  }, [item, open, fileType]);
-
-  const handleSave = async () => {
-    if (!item || !canEditCurrentFile || textContent === null) {
-      return;
-    }
-
-    if (editedContent === textContent) {
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await api.updateFile(item.path, editedContent);
-      setTextContent(editedContent);
-      toast.success(`Saved ${item.name}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save file");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handlePrev = useCallback(() => {
-    if (canGoPrev) {
-      onNavigate(items[currentIndex - 1]);
-    }
-  }, [canGoPrev, currentIndex, items, onNavigate]);
-
-  const handleNext = useCallback(() => {
-    if (canGoNext) {
-      onNavigate(items[currentIndex + 1]);
-    }
-  }, [canGoNext, currentIndex, items, onNavigate]);
-
-  // Keyboard navigation
   useEffect(() => {
     if (!open) return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKey = (event: KeyboardEvent) => {
+      const target = event.target;
       if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      )
         return;
-      }
-
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        handlePrev();
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        handleNext();
-      } else if (e.key === "Escape") {
-        onOpenChange(false);
+      if (
+        target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          target.closest(
+            "input,textarea,select,button,a,.cm-editor,video,audio",
+          ))
+      )
+        return;
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        move(event.key === "ArrowLeft" ? -1 : 1);
       }
     };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, handlePrev, handleNext, onOpenChange]);
-
-  const handleDownload = () => {
-    if (item) {
-      window.open(api.getDownloadUrl(item.path), "_blank");
-      toast.success(`"${item.name}" download started`);
-    }
-  };
-
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen);
-  };
-
-  const renderPreview = () => {
-    if (!item) return null;
-
-    switch (fileType) {
-      case "image":
-        return (
-          <div className="flex h-full items-center justify-center p-4">
-              
-            <img
-              src={api.getPreviewUrl(item.path, "big")}
-              alt={item.name}
-              className="max-h-full max-w-full object-contain"
-            />
-          </div>
-        );
-
-      case "video":
-        return (
-          <div className="flex h-full items-center justify-center p-4">
-            <video
-              src={api.getDownloadUrl(item.path, true)}
-              controls
-              autoPlay
-              className="max-h-full max-w-full"
-            >
-              Your browser does not support the video tag.
-            </video>
-          </div>
-        );
-
-      case "audio":
-        return (
-          <div className="flex h-full flex-col items-center justify-center gap-8 p-4">
-            <div className="flex h-32 w-32 items-center justify-center rounded-full bg-primary/10">
-              <svg
-                className="h-16 w-16 text-primary"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
-              </svg>
-            </div>
-            <audio
-              src={api.getDownloadUrl(item.path, true)}
-              controls
-              autoPlay
-              className="w-full max-w-md"
-            >
-              Your browser does not support the audio tag.
-            </audio>
-          </div>
-        );
-
-      case "code":
-      case "document":
-        if (isLoading) {
-          return (
-            <div className="flex h-full items-center justify-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            </div>
-          );
-        }
-        if (textContent !== null) {
-          if (canEditCurrentFile) {
-            return (
-              <div className="flex h-full flex-col">
-                <div className="flex items-center justify-end gap-2 border-b px-3 py-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditedContent(textContent)}
-                    disabled={isSaving || editedContent === textContent}
-                  >
-                    Reset
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={handleSave}
-                    disabled={
-                      isSaving ||
-                      textContent === null ||
-                      editedContent === textContent
-                    }
-                  >
-                    <Save className="mr-2 h-4 w-4" />
-                    {isSaving ? "Saving..." : "Save"}
-                  </Button>
-                </div>
-                <textarea
-                  className="h-full w-full resize-none border-0 bg-background p-4 font-mono text-sm focus-visible:outline-none"
-                  value={editedContent}
-                  onChange={(event) => setEditedContent(event.target.value)}
-                />
-              </div>
-            );
-          }
-
-          return (
-            <ScrollArea className="h-full">
-              <pre className="p-4 text-sm">
-                <code>{textContent}</code>
-              </pre>
-            </ScrollArea>
-          );
-        }
-        // PDF
-        if (item.name.toLowerCase().endsWith(".pdf")) {
-          return (
-            <iframe
-              src={api.getDownloadUrl(item.path, true)}
-              className="h-full w-full"
-              title={item.name}
-            />
-          );
-        }
-        return (
-          <div className="flex h-full flex-col items-center justify-center gap-4 p-4">
-            <p className="text-muted-foreground">
-              Preview not available for this file type
-            </p>
-            <Button onClick={handleDownload}>
-              <Download className="mr-2 h-4 w-4" />
-              Download
-            </Button>
-          </div>
-        );
-
-      default:
-        return (
-          <div className="flex h-full flex-col items-center justify-center gap-4 p-4">
-            <p className="text-muted-foreground">
-              Preview not available for this file type
-            </p>
-            <Button onClick={handleDownload}>
-              <Download className="mr-2 h-4 w-4" />
-              Download
-            </Button>
-          </div>
-        );
-    }
-  };
-
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [open, move]);
+  const loadText = useCallback(
+    (signal: AbortSignal) => api.getFileContent(item!.path, signal),
+    [item?.path],
+  );
   if (!item) return null;
-
+  const kind = previewKind(item);
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent
+        showClose={false}
         className={cn(
-          "flex flex-col gap-0 p-0",
-          isFullscreen
-            ? "h-screen max-h-screen w-screen max-w-full rounded-none"
-            : "h-[90vh] max-w-5xl"
+          "flex max-h-none min-w-0 flex-col gap-0 overflow-hidden p-0",
+          fullscreen
+            ? "h-[100dvh] w-screen max-w-none rounded-none"
+            : "h-[92dvh] w-[96vw] max-w-7xl sm:rounded-xl",
         )}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <div className="flex-1 min-w-0">
-            <DialogTitle className="truncate">{item.name}</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              {formatBytes(item.size)}
-            </p>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b bg-background px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="hidden rounded-lg border bg-muted p-2 sm:block">
+              <File className="h-5 w-5 text-primary" />
+            </span>
+            <div className="min-w-0">
+              <DialogTitle
+                className="truncate text-sm sm:text-base"
+                title={item.name}
+              >
+                {item.name}
+                {dirty && <span className="ml-2 text-amber-500">●</span>}
+              </DialogTitle>
+              <DialogDescription className="truncate text-xs">
+                {formatBytes(displaySize)} ·{" "}
+                {kind === "code" ? "Code / text" : kind.toUpperCase()} ·{" "}
+                {item.path}
+              </DialogDescription>
+            </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={handleDownload}>
-              <Download className="h-4 w-4" />
+          <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canDownload}
+              onClick={() =>
+                window.open(
+                  api.getDownloadUrl(item.path),
+                  "_blank",
+                  "noopener,noreferrer",
+                )
+              }
+            >
+              <Download className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Download original</span>
             </Button>
-            <Button variant="ghost" size="icon" onClick={toggleFullscreen}>
-              {isFullscreen ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={
+                fullscreen ? "Exit full screen preview" : "Full screen preview"
+              }
+              onClick={() => setFullscreen((value) => !value)}
+            >
+              {fullscreen ? (
                 <Minimize2 className="h-4 w-4" />
               ) : (
                 <Maximize2 className="h-4 w-4" />
@@ -334,46 +176,63 @@ export function PreviewDialog({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onOpenChange(false)}
+              aria-label="Close preview"
+              disabled={busy}
+              onClick={() => changeOpen(false)}
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
-
-        {/* Preview Content */}
-        <div className="relative flex-1 overflow-hidden bg-muted/30">
-          {renderPreview()}
-
-          {/* Navigation Arrows */}
-          {items.length > 1 && (
-            <>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute left-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full shadow-lg"
-                onClick={handlePrev}
-                disabled={!canGoPrev}
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute right-4 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full shadow-lg"
-                onClick={handleNext}
-                disabled={!canGoNext}
-              >
-                <ChevronRight className="h-5 w-5" />
-              </Button>
-            </>
-          )}
+        <div className="min-h-0 flex-1 overflow-hidden bg-muted/20">
+          <FilePreview
+            key={item.path}
+            item={item}
+            url={api.getDownloadUrl(item.path, true)}
+            canEdit={canEdit}
+            canDownload={canDownload}
+            loadText={loadText}
+            onSave={async (content) => {
+              await api.updateFile(item.path, content);
+              setDisplaySize(new TextEncoder().encode(content).byteLength);
+              onSaved?.();
+            }}
+            onDirtyChange={(value) => {
+              state.current.dirty = value;
+              setDirty(value);
+            }}
+            onBusyChange={(value) => {
+              state.current.busy = value;
+              setBusy(value);
+            }}
+            subtitleURL={(path) => api.getSubtitleUrl(path)}
+          />
         </div>
-
-        {/* Footer - File Counter */}
         {items.length > 1 && (
-          <div className="border-t px-4 py-2 text-center text-sm text-muted-foreground">
-            {currentIndex + 1} of {items.length}
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t bg-background px-3 py-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy || currentIndex <= 0}
+              onClick={() => move(-1)}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Previous file
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {currentIndex >= 0 ? currentIndex + 1 : "—"} of {items.length}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={
+                busy || currentIndex < 0 || currentIndex >= items.length - 1
+              }
+              onClick={() => move(1)}
+            >
+              Next file
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
           </div>
         )}
       </DialogContent>

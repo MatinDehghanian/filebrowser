@@ -3,7 +3,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig(({ command }) => ({
-  base: command === "build" ? "/static/" : "/",
+  base: command === "build" ? "./" : "/",
   plugins: [react(), {
     name: "filebrowser-runtime-config",
     transformIndexHtml: {
@@ -31,6 +31,7 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
+  worker: { format: "es" },
   build: {
     outDir: "out",
     emptyOutDir: true,
