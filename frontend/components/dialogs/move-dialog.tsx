@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, joinPaths } from "@/lib/utils";
+import { isWithinPath } from "@/lib/paths";
 import api from "@/lib/api";
 import type { FileItem, FileListingResponse } from "@/types";
 
@@ -23,6 +24,7 @@ interface MoveDialogProps {
   items: FileItem[];
   currentPath: string;
   onComplete: () => void;
+  action?: "move" | "copy";
 }
 
 export function MoveDialog({
@@ -31,6 +33,7 @@ export function MoveDialog({
   items,
   currentPath,
   onComplete,
+  action = "move",
 }: MoveDialogProps) {
   const [selectedPath, setSelectedPath] = useState("/");
   const [isMoving, setIsMoving] = useState(false);
@@ -43,7 +46,7 @@ export function MoveDialog({
   }, [open]);
 
   // Fetch directory contents
-  const { data, isLoading } = useSWR<FileListingResponse>(
+  const { data, isLoading, error } = useSWR<FileListingResponse>(
     open ? `move-dialog:${selectedPath}` : null,
     () => api.getResource(selectedPath),
     { revalidateOnFocus: false }
@@ -58,14 +61,14 @@ export function MoveDialog({
     if (items.length === 0) return;
 
     // Check if moving to same location
-    if (selectedPath === currentPath) {
+    if (action === "move" && selectedPath === currentPath) {
       toast.error("Cannot move to the same location");
       return;
     }
 
     // Check if trying to move folder into itself
     const movingIntoSelf = items.some(
-      (item) => item.isDir && selectedPath.startsWith(item.path)
+      (item) => item.isDir && isWithinPath(item.path, selectedPath)
     );
     if (movingIntoSelf) {
       toast.error("Cannot move a folder into itself");
@@ -75,24 +78,19 @@ export function MoveDialog({
     setIsMoving(true);
 
     try {
-      await Promise.all(
-        items.map((item) => {
-          const destination = joinPaths(selectedPath, item.name);
-          return api.resourceAction(item.path, "move", destination);
-        })
-      );
-
-      toast.success(
-        items.length === 1
-          ? `"${items[0].name}" moved successfully`
-          : `${items.length} items moved successfully`
-      );
-      onComplete();
-      onOpenChange(false);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to move items"
-      );
+      const topLevel = items.filter((item) => !items.some((other) => other !== item && other.isDir && isWithinPath(other.path, item.path)));
+      const results = await Promise.allSettled(topLevel.map((item) =>
+        api.resourceAction(item.path, action, joinPaths(selectedPath, item.name), false,
+          action === "copy" && joinPaths(selectedPath, item.name) === item.path)
+      ));
+      const failures = results.filter((result) => result.status === "rejected");
+      const completed = results.length - failures.length;
+      if (completed) toast.success(`${completed} item(s) ${action === "copy" ? "copied" : "moved"} successfully`);
+      if (failures.length) toast.error(`${failures.length} failed: ${(failures[0] as PromiseRejectedResult).reason?.message || "Please retry"}`);
+      if (completed) {
+        onComplete();
+        onOpenChange(false);
+      }
     } finally {
       setIsMoving(false);
     }
@@ -105,11 +103,11 @@ export function MoveDialog({
   if (items.length === 0) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !isMoving && onOpenChange(next)}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            Move {items.length === 1 ? `"${items[0].name}"` : `${items.length} items`}
+            {action === "copy" ? "Copy" : "Move"} {items.length === 1 ? `"${items[0].name}"` : `${items.length} items`}
           </DialogTitle>
         </DialogHeader>
 
@@ -135,7 +133,7 @@ export function MoveDialog({
                     className="h-7 px-2"
                     onClick={() => navigateTo(crumbPath)}
                   >
-                    {decodeURIComponent(crumb)}
+                    {crumb}
                   </Button>
                 </div>
               );
@@ -148,6 +146,8 @@ export function MoveDialog({
               <div className="flex h-full items-center justify-center">
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               </div>
+            ) : error ? (
+              <p className="p-4 text-destructive">Failed to load folders. Select another location.</p>
             ) : folders.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                 No folders in this directory
@@ -180,7 +180,7 @@ export function MoveDialog({
 
           {/* Selected Path */}
           <div className="rounded-md bg-muted px-3 py-2 text-sm">
-            <span className="text-muted-foreground">Move to: </span>
+            <span className="text-muted-foreground">{action === "copy" ? "Copy to: " : "Move to: "}</span>
             <span className="font-medium">
               {selectedPath === "/" ? "Root" : selectedPath}
             </span>
@@ -195,8 +195,8 @@ export function MoveDialog({
           >
             Cancel
           </Button>
-          <Button onClick={handleMove} disabled={isMoving}>
-            {isMoving ? "Moving..." : "Move Here"}
+          <Button onClick={handleMove} disabled={isMoving || isLoading || Boolean(error)}>
+            {isMoving ? "Working..." : action === "copy" ? "Copy Here" : "Move Here"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -23,6 +23,10 @@ interface FileContextMenuProps {
   onDelete: () => void;
   onShare: () => void;
   onCopy: () => void;
+  onCopyFiles?: () => void;
+  onMove?: () => void;
+  canCopy?: boolean;
+  canDownload?: boolean;
   canRename?: boolean;
   canDelete?: boolean;
   canShare?: boolean;
@@ -39,6 +43,10 @@ export function FileContextMenu({
   onDelete,
   onShare,
   onCopy,
+  onCopyFiles,
+  onMove,
+  canCopy = false,
+  canDownload = false,
   canRename = true,
   canDelete = true,
   canShare = true,
@@ -98,7 +106,7 @@ export function FileContextMenu({
     disabled?: boolean;
   }) => (
     <button
-      onClick={onClick}
+      onClick={() => { onClick(); onClose(); }}
       disabled={disabled}
       className={cn(
         "flex w-full items-center gap-3 rounded-sm px-3 py-2 text-sm transition-colors",
@@ -122,13 +130,15 @@ export function FileContextMenu({
     >
       <MenuItem icon={FolderOpen} label="Open" onClick={onOpen} />
       
-      {!item.isDir && (
+      {canDownload && (
         <MenuItem icon={Download} label="Download" onClick={onDownload} />
       )}
       
       <div className="my-1 h-px bg-border" />
       
-      <MenuItem icon={Copy} label="Copy Link" onClick={onCopy} />
+      <MenuItem icon={Copy} label="Copy Path" onClick={onCopy} />
+      {canCopy && onCopyFiles && <MenuItem icon={Copy} label="Copy Files" onClick={onCopyFiles} />}
+      {canRename && onMove && <MenuItem icon={FolderOpen} label="Move" onClick={onMove} />}
       
       {canShare && (
         <MenuItem icon={Share2} label="Share" onClick={onShare} />

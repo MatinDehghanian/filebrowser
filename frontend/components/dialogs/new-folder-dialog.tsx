@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { joinPaths } from "@/lib/utils";
 import api from "@/lib/api";
+import { validateName } from "@/lib/paths";
 
 interface NewFolderDialogProps {
   open: boolean;
@@ -37,9 +38,9 @@ export function NewFolderDialog({
       return;
     }
 
-    // Validate folder name
-    if (name.includes("/") || name.includes("\\")) {
-      toast.error("Folder name cannot contain slashes");
+    const nameError = validateName(name);
+    if (nameError) {
+      toast.error(nameError);
       return;
     }
 
@@ -50,7 +51,8 @@ export function NewFolderDialog({
       await api.createFolder(folderPath);
       toast.success("Folder created successfully");
       onComplete();
-      handleClose();
+      setName("");
+      onOpenChange(false);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to create folder"
@@ -61,6 +63,7 @@ export function NewFolderDialog({
   };
 
   const handleClose = () => {
+    if (isCreating) return;
     setName("");
     onOpenChange(false);
   };

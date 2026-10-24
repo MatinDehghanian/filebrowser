@@ -23,6 +23,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ShareQrDialog } from "@/components/share/share-qr-dialog";
 import api from "@/lib/api";
+import { appURL } from "@/lib/runtime";
 import type { FileItem, Share } from "@/types";
 
 interface ShareDialogProps {
@@ -60,6 +61,10 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
   const handleCreateShare = async () => {
     if (!item) return;
 
+    if (expires && (!/^\d+$/.test(expires) || Number(expires) <= 0)) {
+      toast.error("Expiration must be a positive whole number");
+      return;
+    }
     setIsCreating(true);
 
     try {
@@ -97,7 +102,7 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
   };
 
   const copyShareLink = async (hash: string) => {
-    const url = `${window.location.origin}/share/${hash}`;
+    const url = `${window.location.origin}${appURL(`/share/${hash}`)}`;
     try {
       await navigator.clipboard.writeText(url);
       toast.success("Link copied to clipboard");
@@ -129,7 +134,7 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
   };
 
   const openShareQr = (hash: string) => {
-    setQrUrl(`${window.location.origin}/share/${hash}`);
+    setQrUrl(`${window.location.origin}${appURL(`/share/${hash}`)}`);
     setIsQrOpen(true);
   };
 

@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getParentPath, joinPaths } from "@/lib/utils";
 import api from "@/lib/api";
+import { validateName } from "@/lib/paths";
 import type { FileItem } from "@/types";
 
 interface RenameDialogProps {
@@ -46,9 +47,9 @@ export function RenameDialog({
       return;
     }
 
-    // Validate name
-    if (name.includes("/") || name.includes("\\")) {
-      toast.error("Name cannot contain slashes");
+    const nameError = validateName(name);
+    if (nameError) {
+      toast.error(nameError);
       return;
     }
 
@@ -81,7 +82,7 @@ export function RenameDialog({
   if (!item) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !isRenaming && onOpenChange(next)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Rename {item.isDir ? "Folder" : "File"}</DialogTitle>

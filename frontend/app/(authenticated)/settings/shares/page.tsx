@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
+import { appURL } from "@/lib/runtime";
 import type { ApiError, Share } from "@/types";
 
 export default function SharesSettingsPage() {
@@ -70,7 +71,7 @@ export default function SharesSettingsPage() {
   };
 
   const copyShareLink = (hash: string) => {
-    const url = `${window.location.origin}/share/${hash}`;
+    const url = `${window.location.origin}${appURL(`/share/${hash}`)}`;
     navigator.clipboard
       .writeText(url)
       .then(() => toast.success("Link copied to clipboard"))

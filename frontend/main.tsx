@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 import AppProviders from "@/app/layout";
 import AppRouter from "@/app/router";
+import { baseURL } from "@/lib/runtime";
 
 const rootElement = document.getElementById("root");
 
@@ -13,7 +14,7 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={baseURL || "/"}>
       <AppProviders>
         <AppRouter />
       </AppProviders>

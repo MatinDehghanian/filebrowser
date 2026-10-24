@@ -27,7 +27,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState("login");
-  const [allowSignup, setAllowSignup] = useState(true);
+  const [instanceName, setInstanceName] = useState("File Browser");
+  const [allowSignup, setAllowSignup] = useState(false);
   const [minPasswordLength, setMinPasswordLength] = useState(6);
 
   // Redirect if already authenticated
@@ -45,6 +46,7 @@ export default function LoginPage() {
       .then((settings) => {
         if (!isMounted) return;
         setAllowSignup(settings.signup);
+        setInstanceName(settings.branding.name || "File Browser");
         if (settings.minimumPasswordLength) {
           setMinPasswordLength(settings.minimumPasswordLength);
         }
@@ -131,7 +133,7 @@ export default function LoginPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
             <FolderOpen className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle className="text-2xl">File Browser</CardTitle>
+          <CardTitle className="text-2xl">{instanceName}</CardTitle>
           <CardDescription>Sign in to access your files</CardDescription>
         </CardHeader>
         <CardContent>

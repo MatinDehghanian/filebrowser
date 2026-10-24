@@ -10,6 +10,8 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
+import { SWRConfig } from "swr";
+import { appURL } from "@/lib/runtime";
 import type { User, LoginCredentials } from "@/types";
 
 interface AuthContextType {
@@ -25,8 +27,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const TOKEN_KEY = "filebrowser_token";
-const USER_KEY = "filebrowser_user";
+const TOKEN_KEY = `filebrowser_token${appURL("")}`;
+const USER_KEY = `filebrowser_user${appURL("")}`;
 
 // Token renewal interval (14 minutes, assuming 15 min token expiry)
 const TOKEN_RENEWAL_INTERVAL = 14 * 60 * 1000;
@@ -69,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setToken(null);
     api.setToken(null);
-    document.cookie = "auth=; Max-Age=0; Path=/; SameSite=Strict";
+    document.cookie = `auth=; Max-Age=0; Path=${appURL("/")}; SameSite=Strict`;
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
   }, []);
@@ -78,7 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(newToken);
     setUser(newUser);
     api.setToken(newToken);
-    document.cookie = `auth=${newToken}; Path=/; SameSite=Strict`;
+    document.cookie = `auth=${newToken}; Path=${appURL("/")}; SameSite=Strict${window.location.protocol === "https:" ? "; Secure" : ""}`;
     localStorage.setItem(TOKEN_KEY, newToken);
     localStorage.setItem(USER_KEY, JSON.stringify(newUser));
   }, []);
@@ -90,53 +92,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await api.renewToken();
       const payload = parseJWT(response.token);
       if (payload?.user) {
-        saveAuth(response.token, payload.user);
+        api.setToken(response.token);
+        saveAuth(response.token, await api.getUser(payload.user.id));
       }
     } catch (error) {
       console.error("Token renewal failed:", error);
-      clearAuth();
-      navigate("/login");
+      if ((error as { status?: number }).status === 401) {
+        clearAuth();
+        navigate("/login");
+      }
     }
   }, [token, saveAuth, clearAuth, navigate]);
 
   // Initialize auth state from localStorage
   useEffect(() => {
     const initAuth = async () => {
-      const storedToken = localStorage.getItem(TOKEN_KEY);
-      const storedUser = localStorage.getItem(USER_KEY);
-
-      if (storedToken && storedUser) {
-        if (isTokenExpired(storedToken)) {
-          // Try to renew
+      try {
+        const storedToken = localStorage.getItem(TOKEN_KEY);
+        if (storedToken && !isTokenExpired(storedToken)) {
+          const payload = parseJWT(storedToken);
+          if (!payload?.user) throw new Error("Invalid saved session");
           api.setToken(storedToken);
-          try {
-            const response = await api.renewToken();
-            const payload = parseJWT(response.token);
-            if (payload?.user) {
-              saveAuth(response.token, payload.user);
-            }
-          } catch {
-            clearAuth();
-          }
+          saveAuth(storedToken, await api.getUser(payload.user.id));
         } else {
-          const parsedUser = JSON.parse(storedUser) as User;
-          setToken(storedToken);
-          setUser(parsedUser);
-          api.setToken(storedToken);
+          clearAuth();
+          const settings = await api.getPublicSettings();
+          if (settings.authMethod === "noauth" || settings.authMethod === "proxy") {
+            const response = await api.login({ username: "", password: "" });
+            const payload = parseJWT(response.token);
+            if (!payload?.user) throw new Error("Invalid session");
+            api.setToken(response.token);
+            saveAuth(response.token, await api.getUser(payload.user.id));
+          }
         }
+      } catch {
+        clearAuth();
+      } finally {
+        setIsLoading(false);
       }
-
-      setIsLoading(false);
     };
 
     initAuth();
   }, [clearAuth, saveAuth]);
 
+  useEffect(() => {
+    const onUnauthorized = () => clearAuth();
+    window.addEventListener("filebrowser:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("filebrowser:unauthorized", onUnauthorized);
+  }, [clearAuth]);
+
   // Set up token renewal interval
   useEffect(() => {
     if (!token) return;
 
-    const interval = setInterval(renewToken, TOKEN_RENEWAL_INTERVAL);
+    const expiry = parseJWT(token)?.exp;
+    const delay = expiry ? Math.max(1000, Math.min(TOKEN_RENEWAL_INTERVAL, (expiry * 1000 - Date.now()) / 2)) : TOKEN_RENEWAL_INTERVAL;
+    const interval = setInterval(renewToken, delay);
     return () => clearInterval(interval);
   }, [token, renewToken]);
 
@@ -162,7 +173,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Invalid token received");
       }
 
-      saveAuth(response.token, payload.user);
+      api.setToken(response.token);
+      saveAuth(response.token, await api.getUser(payload.user.id));
       navigate("/files/");
     },
     [saveAuth, navigate]
@@ -203,7 +215,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateUser,
       }}
     >
-      {children}
+      <SWRConfig key={user?.id ?? "anonymous"} value={{ provider: () => new Map(), shouldRetryOnError: false }}>
+        {children}
+      </SWRConfig>
     </AuthContext.Provider>
   );
 }

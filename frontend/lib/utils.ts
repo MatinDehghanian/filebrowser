@@ -17,13 +17,20 @@ export function formatBytes(bytes: number, decimals = 2): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
 }
 
-export function formatDate(date: string | Date): string {
+export function formatDate(date: string | Date, relative = false, locale = "en"): string {
   const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) {
     return "-";
   }
+  try { Intl.getCanonicalLocales(locale); } catch { locale = "en"; }
 
-  return new Intl.DateTimeFormat("en-US", {
+  if (relative) {
+    const seconds = (d.getTime() - Date.now()) / 1000;
+    const units: [Intl.RelativeTimeFormatUnit, number][] = [["year", 31536000], ["month", 2592000], ["day", 86400], ["hour", 3600], ["minute", 60], ["second", 1]];
+    const [unit, divisor] = units.find(([, value]) => Math.abs(seconds) >= value) || units[units.length - 1];
+    return new Intl.RelativeTimeFormat(locale || "en", { numeric: "auto" }).format(Math.round(seconds / divisor), unit);
+  }
+  return new Intl.DateTimeFormat(locale || "en", {
     year: "numeric",
     month: "short",
     day: "numeric",

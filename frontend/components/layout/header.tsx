@@ -26,7 +26,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import type { ViewMode } from "@/types";
+import { encodePath } from "@/lib/paths";
+import type { Sorting, ViewMode } from "@/types";
 
 interface HeaderProps {
   path: string;
@@ -37,6 +38,8 @@ interface HeaderProps {
   onNewFile: () => void;
   onRefresh: () => void;
   canCreate?: boolean;
+  sorting: Sorting;
+  onSortingChange: (sorting: Sorting) => void;
 }
 
 export function Header({
@@ -48,6 +51,8 @@ export function Header({
   onNewFile,
   onRefresh,
   canCreate = true,
+  sorting,
+  onSortingChange,
 }: HeaderProps) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -70,11 +75,11 @@ export function Header({
 
     const timeout = window.setTimeout(() => {
       if (!normalizedSearch) {
-        navigate(`/files${path}`, { replace: true });
+        navigate(`/files${encodePath(path)}`, { replace: true });
         return;
       }
 
-      navigate(`/files${path}?search=${encodeURIComponent(normalizedSearch)}`, {
+      navigate(`/files${encodePath(path)}?search=${encodeURIComponent(normalizedSearch)}`, {
         replace: true,
       });
     }, 350);
@@ -87,11 +92,11 @@ export function Header({
     const normalizedSearch = searchQuery.trim();
 
     if (!normalizedSearch) {
-      navigate(`/files${path}`);
+      navigate(`/files${encodePath(path)}`);
       return;
     }
 
-    navigate(`/files${path}?search=${encodeURIComponent(normalizedSearch)}`);
+    navigate(`/files${encodePath(path)}?search=${encodeURIComponent(normalizedSearch)}`);
   };
 
 
@@ -118,7 +123,7 @@ export function Header({
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={onUpload}>
+                  <Button variant="ghost" size="icon" aria-label="Upload files" onClick={onUpload}>
                     <Upload className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
@@ -129,7 +134,7 @@ export function Header({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
+                      <Button variant="ghost" size="icon" aria-label="New file or folder">
                         <FilePlus className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -152,6 +157,13 @@ export function Header({
 
           <div className="mx-1 h-6 w-px bg-border sm:mx-2" />
 
+          <select aria-label="Sort files" className="h-9 max-w-36 rounded-md border bg-background px-2 text-sm"
+            value={`${sorting.by}:${sorting.asc ? "asc" : "desc"}`}
+            onChange={(event) => { const [by, order] = event.target.value.split(":"); onSortingChange({ by, asc: order === "asc" }); }}>
+            <option value="name:asc">Name A–Z</option><option value="name:desc">Name Z–A</option>
+            <option value="size:asc">Smallest first</option><option value="size:desc">Largest first</option>
+            <option value="modified:desc">Newest first</option><option value="modified:asc">Oldest first</option>
+          </select>
           {/* View Mode Toggle */}
           <div className="flex items-center rounded-md border bg-muted p-1">
             <Tooltip>
@@ -163,6 +175,7 @@ export function Header({
                     "h-7 w-7",
                     viewMode === "list" && "bg-background shadow-sm"
                   )}
+                  aria-label="List view"
                   onClick={() => onViewModeChange("list")}
                 >
                   <List className="h-4 w-4" />
@@ -180,6 +193,7 @@ export function Header({
                     "h-7 w-7",
                     viewMode === "mosaic" && "bg-background shadow-sm"
                   )}
+                  aria-label="Grid view"
                   onClick={() => onViewModeChange("mosaic")}
                 >
                   <LayoutGrid className="h-4 w-4" />
@@ -191,7 +205,7 @@ export function Header({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={onRefresh} className="shrink-0">
+              <Button variant="ghost" size="icon" aria-label="Refresh files" onClick={onRefresh} className="shrink-0">
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </TooltipTrigger>

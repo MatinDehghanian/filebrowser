@@ -43,13 +43,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useIsAdmin } from "@/contexts/auth-context";
+import { useIsAdmin, useAuth } from "@/contexts/auth-context";
 import api from "@/lib/api";
 import type { User, Permissions } from "@/types";
 
 const DEFAULT_PERMISSIONS: Permissions = {
   admin: false,
-  execute: true,
+  execute: false,
   create: true,
   rename: true,
   modify: true,
@@ -79,7 +79,8 @@ const INITIAL_FORM: UserFormData = {
 export default function UsersSettingsPage() {
   const navigate = useNavigate();
   const isAdmin = useIsAdmin();
-  const { data: users, mutate, isLoading } = useSWR<User[]>("users", () => api.getUsers());
+  const { user: currentUser, updateUser } = useAuth();
+  const { data: users, mutate, isLoading } = useSWR<User[]>(isAdmin ? "users" : null, () => api.getUsers());
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -153,9 +154,10 @@ export default function UsersSettingsPage() {
       }
 
       if (editingUser) {
-        await api.updateUser(editingUser.id, userData, {
+        const updated = await api.updateUser(editingUser.id, userData, {
           currentPassword: formData.currentPassword,
         });
+        if (updated.id === currentUser?.id) updateUser(updated);
         toast.success("User updated successfully");
       } else {
         await api.createUser(userData, {

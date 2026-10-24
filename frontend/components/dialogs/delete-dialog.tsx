@@ -12,6 +12,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { isWithinPath } from "@/lib/paths";
 import api from "@/lib/api";
 import type { FileItem } from "@/types";
 
@@ -36,20 +37,16 @@ export function DeleteDialog({
     setIsDeleting(true);
 
     try {
-      // Delete all items
-      await Promise.all(items.map((item) => api.deleteResource(item.path)));
-
-      toast.success(
-        items.length === 1
-          ? `"${items[0].name}" deleted successfully`
-          : `${items.length} items deleted successfully`
-      );
-      onComplete();
-      onOpenChange(false);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to delete items"
-      );
+      const topLevel = items.filter((item) => !items.some((other) => other !== item && other.isDir && isWithinPath(other.path, item.path)));
+      const results = await Promise.allSettled(topLevel.map((item) => api.deleteResource(item.path)));
+      const failures = results.filter((result) => result.status === "rejected");
+      const completed = results.length - failures.length;
+      if (completed) toast.success(`${completed} item(s) deleted successfully`);
+      if (failures.length) toast.error(`${failures.length} failed: ${(failures[0] as PromiseRejectedResult).reason?.message || "Please retry"}`);
+      if (completed) {
+        onComplete();
+        onOpenChange(false);
+      }
     } finally {
       setIsDeleting(false);
     }
@@ -61,7 +58,7 @@ export function DeleteDialog({
   const hasFolders = items.some((item) => item.isDir);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !isDeleting && onOpenChange(next)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

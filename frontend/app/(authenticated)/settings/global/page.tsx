@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,8 +30,9 @@ import type { DeepPartial, Settings, ViewMode } from "@/types";
 export default function GlobalSettingsPage() {
   const navigate = useNavigate();
   const isAdmin = useIsAdmin();
+  const { mutate: mutateCache } = useSWRConfig();
   const { data: settings, mutate, isLoading } = useSWR<Settings>(
-    "settings",
+    isAdmin ? "settings" : null,
     () => api.getSettings()
   );
 
@@ -57,19 +58,13 @@ export default function GlobalSettingsPage() {
     setIsSaving(true);
 
     try {
-      await toast.promise(
-        (async () => {
-          await api.updateSettings(formData);
-          await mutate();
-          setFormData({});
-        })(),
-        {
-          loading: "Saving settings...",
-          success: "Settings saved successfully",
-          error: (error) =>
-            error instanceof Error ? error.message : "Failed to save settings",
-        },
-      );
+      await api.updateSettings(formData);
+      await mutate();
+      await mutateCache("public-settings");
+      setFormData({});
+      toast.success("Settings saved successfully");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save settings");
     } finally {
       setIsSaving(false);
     }

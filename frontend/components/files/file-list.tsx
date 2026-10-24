@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileItem } from "./file-item";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { encodePath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 import type { FileItem as FileItemType, ViewMode, Sorting } from "@/types";
 
@@ -17,6 +18,9 @@ interface FileListProps {
   onSelectionChange: (items: FileItemType[]) => void;
   isSearching?: boolean;
   searchRootPath?: string;
+  singleClick?: boolean;
+  dateFormat?: boolean;
+  locale?: string;
 }
 
 export function FileList({
@@ -29,6 +33,9 @@ export function FileList({
   onSelectionChange,
   isSearching = false,
   searchRootPath = "/",
+  singleClick = false,
+  dateFormat = false,
+  locale = "en",
 }: FileListProps) {
   const navigate = useNavigate();
 
@@ -41,7 +48,7 @@ export function FileList({
       let comparison = 0;
       switch (sorting.by) {
         case "name":
-          comparison = a.name.localeCompare(b.name);
+          comparison = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
           break;
         case "size":
           comparison = a.size - b.size;
@@ -50,7 +57,7 @@ export function FileList({
           comparison = new Date(a.modified).getTime() - new Date(b.modified).getTime();
           break;
         default:
-          comparison = a.name.localeCompare(b.name);
+          comparison = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
       }
       return sorting.asc ? comparison : -comparison;
     };
@@ -87,7 +94,7 @@ export function FileList({
   const handleOpen = useCallback(
     (item: FileItemType) => {
       if (item.isDir) {
-        navigate(`/files${item.path}/`);
+        navigate(`/files${encodePath(item.path)}/`);
       } else {
         onPreview(item);
       }
@@ -135,9 +142,9 @@ export function FileList({
           </svg>
         </div>
         <div>
-          <h3 className="font-semibold">This folder is empty</h3>
+          <h3 className="font-semibold">{isSearching ? "No matching files" : "This folder is empty"}</h3>
           <p className="text-sm text-muted-foreground">
-            Upload files or create a new folder to get started
+            {isSearching ? "Try a different search term" : "Upload files or create a new folder to get started"}
           </p>
         </div>
       </div>
@@ -164,6 +171,9 @@ export function FileList({
                 viewMode={viewMode}
                 showParentPath={isSearching}
                 searchRootPath={searchRootPath}
+                singleClick={singleClick}
+                dateFormat={dateFormat}
+                locale={locale}
                 selected={isSelected(item)}
                 onSelect={handleSelect}
                 onToggleSelect={handleToggleSelect}
@@ -189,6 +199,9 @@ export function FileList({
               viewMode={viewMode}
               showParentPath={isSearching}
               searchRootPath={searchRootPath}
+              singleClick={singleClick}
+              dateFormat={dateFormat}
+                locale={locale}
               selected={isSelected(item)}
               onSelect={handleSelect}
               onToggleSelect={handleToggleSelect}

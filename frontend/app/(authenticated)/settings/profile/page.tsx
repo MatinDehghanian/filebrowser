@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useAuth, useUser } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ import type { ViewMode } from "@/types";
 
 const LOCALES = [
   { value: "en", label: "English" },
+  { value: "fa", label: "Persian" },
   { value: "es", label: "Spanish" },
   { value: "fr", label: "French" },
   { value: "de", label: "German" },
@@ -53,6 +54,8 @@ export default function ProfileSettingsPage() {
   const [singleClick, setSingleClick] = useState(user.singleClick);
   const [hideDotfiles, setHideDotfiles] = useState(user.hideDotfiles);
   const [dateFormat, setDateFormat] = useState(user.dateFormat);
+  const [minimumPasswordLength, setMinimumPasswordLength] = useState(12);
+  useEffect(() => { api.getPublicSettings().then((settings) => setMinimumPasswordLength(settings.minimumPasswordLength)).catch(() => {}); }, []);
   const [isSavingPrefs, setIsSavingPrefs] = useState(false);
 
   const handlePasswordChange = async () => {
@@ -71,28 +74,21 @@ export default function ProfileSettingsPage() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    if (newPassword.length < minimumPasswordLength) {
+      toast.error(`Password must be at least ${minimumPasswordLength} characters`);
       return;
     }
 
     setIsChangingPassword(true);
 
     try {
-      await toast.promise(
-        api.updateUser(user.id, { password: newPassword }, { currentPassword }),
-        {
-          loading: "Changing password...",
-          success: "Password changed successfully",
-          error: (error) =>
-            error instanceof Error
-              ? error.message
-              : "Failed to change password",
-        },
-      );
+      await api.updateUser(user.id, { password: newPassword }, { currentPassword });
+      toast.success("Password changed successfully");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to change password");
     } finally {
       setIsChangingPassword(false);
     }
@@ -110,15 +106,11 @@ export default function ProfileSettingsPage() {
         dateFormat,
       });
 
-      toast.promise(request, {
-        loading: "Saving preferences...",
-        success: "Preferences saved successfully",
-        error: (error) =>
-          error instanceof Error ? error.message : "Failed to save preferences",
-      });
-
       const updatedUser = await request;
       updateUser(updatedUser);
+      toast.success("Preferences saved successfully");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save preferences");
     } finally {
       setIsSavingPrefs(false);
     }
@@ -214,7 +206,7 @@ export default function ProfileSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="locale">Language</Label>
+              <Label htmlFor="locale">Date Language</Label>
               <Select value={locale} onValueChange={setLocale}>
                 <SelectTrigger id="locale">
                   <SelectValue />

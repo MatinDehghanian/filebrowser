@@ -27,6 +27,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm run lint
+          pnpm test
 
   lint-backend:
     name: Lint Backend

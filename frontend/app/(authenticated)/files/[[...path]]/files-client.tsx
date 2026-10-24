@@ -22,8 +22,9 @@ import { SelectionBar } from "@/components/files/selection-bar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
+import { decodePath, encodePath } from "@/lib/paths";
 import { joinPaths } from "@/lib/utils";
-import type { FileItem, FileListingResponse, ViewMode, Sorting } from "@/types";
+import type { FileItem, FileListingResponse, ViewMode, Sorting, User } from "@/types";
 
 interface FilesClientProps {
   params?: never;
@@ -32,17 +33,17 @@ interface FilesClientProps {
 export default function FilesClient({}: FilesClientProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const rawPath = location.pathname.replace(/^\/files/, "") || "/";
+  const rawPath = decodePath(location.pathname.replace(/^\/files/, "") || "/");
   const path = rawPath.length > 1 && rawPath.endsWith("/")
     ? rawPath.slice(0, -1)
     : rawPath;
 
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
 
   // State
   const [viewMode, setViewMode] = useState<ViewMode>(user?.viewMode || "list");
-  const [sorting] = useState<Sorting>(
+  const [sorting, setSorting] = useState<Sorting>(
     user?.sorting || { by: "name", asc: true }
   );
   const [selectedItems, setSelectedItems] = useState<FileItem[]>([]);
@@ -59,6 +60,7 @@ export default function FilesClient({}: FilesClientProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [transferAction, setTransferAction] = useState<"move" | "copy">("move");
   const [shareOpen, setShareOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewItem, setPreviewItem] = useState<FileItem | null>(null);
@@ -78,7 +80,7 @@ export default function FilesClient({}: FilesClientProps) {
     "";
   const isSearching = searchQuery.length > 0;
 
-  const { data: searchResults, isLoading: isSearchLoading } = useSWR(
+  const { data: searchResults, error: searchError, isLoading: isSearchLoading, mutate: mutateSearch } = useSWR(
     isSearching ? `search:${path}:${searchQuery}` : null,
     () => api.search(path, searchQuery),
     { revalidateOnFocus: false },
@@ -86,14 +88,14 @@ export default function FilesClient({}: FilesClientProps) {
 
   const items = useMemo(
     () => (isSearching ? searchResults?.items || [] : data?.items || []),
-    [data?.items, searchQuery, searchResults?.items],
+    [data?.items, isSearching, searchResults?.items],
   );
 
   // Clear selection on path change
   useEffect(() => {
     setSelectedItems([]);
     setContextMenu(null);
-  }, [path]);
+  }, [path, searchQuery]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -101,16 +103,17 @@ export default function FilesClient({}: FilesClientProps) {
       // Ignore if typing in input
       if (
         e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && (e.target.isContentEditable || e.target.closest("[role=dialog], [role=alertdialog]")))
       ) {
         return;
       }
 
-      if (e.key === "Delete" && selectedItems.length > 0) {
+      if (e.key === "Delete" && user?.perm.delete && selectedItems.length > 0) {
         setDeleteOpen(true);
       }
 
-      if (e.key === "F2" && selectedItems.length === 1) {
+      if (e.key === "F2" && user?.perm.rename && selectedItems.length === 1) {
         setRenameOpen(true);
       }
 
@@ -127,7 +130,7 @@ export default function FilesClient({}: FilesClientProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedItems, items]);
+  }, [selectedItems, items, user]);
 
   const handleContextMenu = useCallback(
     (item: FileItem, event: React.MouseEvent) => {
@@ -146,8 +149,9 @@ export default function FilesClient({}: FilesClientProps) {
   }, []);
 
   const handleRefresh = useCallback(() => {
-    mutate();
-  }, [mutate]);
+    void mutate();
+    if (isSearching) void mutateSearch();
+  }, [mutate, mutateSearch, isSearching]);
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -156,7 +160,7 @@ export default function FilesClient({}: FilesClientProps) {
   const canCreate = user?.perm?.create ?? false;
   const canDelete = user?.perm?.delete ?? false;
   const canRename = user?.perm?.rename ?? false;
-  const canShare = user?.perm?.share ?? false;
+  const canShare = Boolean(user?.perm?.share && user?.perm?.download);
   const canDownload = user?.perm?.download ?? false;
   const canModify = user?.perm?.modify ?? false;
 
@@ -222,24 +226,12 @@ export default function FilesClient({}: FilesClientProps) {
         return;
       }
 
-      const token = api.getToken();
       let completedCount = 0;
       let errorCount = 0;
-
       for (const file of files) {
         const filePath = joinPaths(path, file.name);
-
         try {
-          const response = await fetch(`/api/resources${filePath}?override=false`, {
-            method: "POST",
-            headers: token ? { "X-Auth": token } : undefined,
-            body: file,
-          });
-
-          if (!response.ok) {
-            throw new Error("Upload failed");
-          }
-
+          await api.uploadFile(filePath, file);
           completedCount++;
         } catch {
           errorCount++;
@@ -259,7 +251,7 @@ export default function FilesClient({}: FilesClientProps) {
   );
 
   useEffect(() => {
-    if (!canCreate) {
+    if (!canCreate || uploadOpen || previewOpen || moveOpen || renameOpen || newFileOpen || newFolderOpen || deleteOpen || shareOpen) {
       return;
     }
 
@@ -325,22 +317,22 @@ export default function FilesClient({}: FilesClientProps) {
       window.removeEventListener("dragleave", handleDragLeave);
       window.removeEventListener("drop", handleDrop);
     };
-  }, [canCreate, handleDropUpload]);
+  }, [canCreate, handleDropUpload, uploadOpen, previewOpen, moveOpen, renameOpen, newFileOpen, newFolderOpen, deleteOpen, shareOpen]);
 
-  if (error) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4">
-        <p className="text-destructive">Failed to load files</p>
-      </div>
-    );
-  }
+  const saveDisplayPreference = async (preference: Partial<User>) => {
+    if (!user) return;
+    try { updateUser(await api.updateUser(user.id, preference)); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Could not save display preferences"); }
+  };
 
   return (
     <div className="flex h-full flex-col">
       <Header
         path={path}
         viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        onViewModeChange={(mode) => { setViewMode(mode); void saveDisplayPreference({ viewMode: mode }); }}
+        sorting={sorting}
+        onSortingChange={(next) => { setSorting(next); void saveDisplayPreference({ sorting: next }); }}
         onUpload={() => setUploadOpen(true)}
         onNewFolder={() => setNewFolderOpen(true)}
         onNewFile={() => setNewFileOpen(true)}
@@ -350,7 +342,7 @@ export default function FilesClient({}: FilesClientProps) {
 
       <Breadcrumbs path={path} />
 
-      {selectedItems.length > 0 && (
+      {items.length > 0 && (
         <div className="flex flex-col gap-3 border-b bg-muted/30 px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-3">
             <Checkbox
@@ -384,7 +376,13 @@ export default function FilesClient({}: FilesClientProps) {
         </div>
       )}
 
-      {isLoading || (isSearching && isSearchLoading) ? (
+      {error || searchError ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4">
+          <p className="text-destructive">{(error || searchError)?.message || "Failed to load files"}</p>
+          <Button onClick={handleRefresh}>Retry</Button>
+          <Button variant="outline" onClick={() => navigate("/files/")}>Go to root</Button>
+        </div>
+      ) : isLoading || (isSearching && isSearchLoading) ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
@@ -399,6 +397,9 @@ export default function FilesClient({}: FilesClientProps) {
 
           <FileList
             items={items}
+            singleClick={user?.singleClick}
+            dateFormat={user?.dateFormat}
+            locale={user?.locale}
             viewMode={viewMode}
             sorting={sorting}
             onContextMenu={handleContextMenu}
@@ -416,7 +417,10 @@ export default function FilesClient({}: FilesClientProps) {
           selectedCount={selectedItems.length}
           onClear={() => setSelectedItems([])}
           onDelete={() => setDeleteOpen(true)}
-          onMove={() => setMoveOpen(true)}
+          onMove={() => { setTransferAction("move"); setMoveOpen(true); }}
+          onCopy={() => { setTransferAction("copy"); setMoveOpen(true); }}
+          canMove={canRename}
+          canCopy={canCreate}
           onShare={() => setShareOpen(true)}
           onDownload={handleDownloadSelected}
           canDelete={canDelete}
@@ -444,7 +448,7 @@ export default function FilesClient({}: FilesClientProps) {
           onClose={closeContextMenu}
           onOpen={() => {
             if (contextMenu.item.isDir) {
-              navigate(`/files${contextMenu.item.path}/`);
+              navigate(`/files${encodePath(contextMenu.item.path)}/`);
             } else {
               handlePreview(contextMenu.item);
             }
@@ -462,6 +466,10 @@ export default function FilesClient({}: FilesClientProps) {
               .then(() => toast.success("Path copied to clipboard"))
               .catch(() => toast.error("Failed to copy path"));
           }}
+          onCopyFiles={() => { setTransferAction("copy"); setMoveOpen(true); }}
+          onMove={() => { setTransferAction("move"); setMoveOpen(true); }}
+          canCopy={canCreate}
+          canDownload={canDownload}
           canRename={canRename}
           canDelete={canDelete}
           canShare={canShare}
@@ -499,12 +507,13 @@ export default function FilesClient({}: FilesClientProps) {
         open={renameOpen}
         onOpenChange={setRenameOpen}
         item={selectedItems[0]}
-        onComplete={handleRefresh}
+        onComplete={() => { setSelectedItems([]); handleRefresh(); }}
       />
       <MoveDialog
         open={moveOpen}
         onOpenChange={setMoveOpen}
         items={selectedItems}
+        action={transferAction}
         currentPath={path}
         onComplete={() => {
           setSelectedItems([]);

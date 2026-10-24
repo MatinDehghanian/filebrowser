@@ -13,8 +13,17 @@ import type {
   DeepPartial,
 } from "@/types";
 import { getFileExtension, getFileName, getFileType } from "@/lib/utils";
+import { encodePath } from "@/lib/paths";
+import { appURL } from "@/lib/runtime";
 
-const API_BASE = "/api";
+const API_BASE = appURL("/api");
+
+export class ApiRequestError extends Error implements ApiError {
+  constructor(message: string, public status?: number) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
 
 class ApiClient {
   private token: string | null = null;
@@ -56,21 +65,18 @@ class ApiClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
+    allowText = false,
   ): Promise<T> {
-    const headers: HeadersInit = {
-      ...options.headers,
-    };
+    const headers = new Headers(options.headers);
 
     if (this.token) {
-      (headers as Record<string, string>)["X-Auth"] = this.token;
+      headers.set("X-Auth", this.token);
     }
 
-    const hasContentTypeHeader = Object.keys(headers as Record<string, string>).some(
-      (key) => key.toLowerCase() === "content-type"
-    );
+    const hasContentTypeHeader = headers.has("Content-Type");
 
     if (options.body && typeof options.body === "string" && !hasContentTypeHeader) {
-      (headers as Record<string, string>)["Content-Type"] = "application/json";
+      headers.set("Content-Type", "application/json");
     }
 
     const response = await fetch(`${API_BASE}${endpoint}`, {
@@ -79,15 +85,19 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      let message = "An error occurred";
+      const body = await response.text();
+      let message = body.trim() || response.statusText || "An error occurred";
       try {
-        const errorData = await response.json();
+        const errorData = JSON.parse(body);
         message = errorData.message || errorData.error || message;
       } catch {
-        message = response.statusText || message;
+        // The Go API also returns useful plain-text error messages.
       }
-      const error: ApiError = { message, status: response.status };
-      throw error;
+      if (response.status === 409) message = "An item with this name already exists. Choose another name.";
+      if (response.status === 401 && !endpoint.startsWith("/public/")) {
+        window.dispatchEvent(new Event("filebrowser:unauthorized"));
+      }
+      throw new ApiRequestError(message, response.status);
     }
 
     // Handle empty responses
@@ -98,6 +108,9 @@ class ApiClient {
 
     // Return text for non-JSON responses
     const text = await response.text();
+    if (text && !allowText) {
+      throw new ApiRequestError("The server returned an unexpected response. Check the server address and try again.", response.status);
+    }
     return text as unknown as T;
   }
 
@@ -106,7 +119,7 @@ class ApiClient {
     const response = await this.request<AuthResponse | string>("/login", {
       method: "POST",
       body: JSON.stringify(credentials),
-    });
+    }, true);
 
     return this.normalizeAuthResponse(response);
   }
@@ -121,33 +134,32 @@ class ApiClient {
   async renewToken(): Promise<AuthResponse> {
     const response = await this.request<AuthResponse | string>("/renew", {
       method: "POST",
-    });
+    }, true);
 
     return this.normalizeAuthResponse(response);
   }
 
   // Resources (Files/Folders)
   async getResource(path: string): Promise<FileListingResponse> {
-    const encodedPath = encodeURIComponent(path);
     return this.request<FileListingResponse>(
-      `/resources${path}?path=${encodedPath}`,
+      `/resources${encodePath(path)}`,
     );
   }
 
   async deleteResource(path: string): Promise<void> {
-    return this.request(`/resources${path}`, {
+    return this.request(`/resources${encodePath(path)}`, {
       method: "DELETE",
     });
   }
 
   async createFolder(path: string): Promise<void> {
-    return this.request(`/resources${path}/`, {
+    return this.request(`/resources${encodePath(path).replace(/\/+$/, "")}/`, {
       method: "POST",
     });
   }
 
   async createFile(path: string, content: string = ""): Promise<void> {
-    return this.request(`/resources${path}`, {
+    return this.request(`/resources${encodePath(path)}`, {
       method: "POST",
       body: content,
       headers: {
@@ -157,7 +169,7 @@ class ApiClient {
   }
 
   async updateFile(path: string, content: string): Promise<void> {
-    return this.request(`/resources${path}`, {
+    return this.request(`/resources${encodePath(path)}`, {
       method: "PUT",
       body: content,
       headers: {
@@ -176,29 +188,35 @@ class ApiClient {
     const params = new URLSearchParams({
       action,
       destination,
-      overwrite: String(overwrite),
+      override: String(overwrite),
       rename: String(rename),
     });
-    return this.request(`/resources${path}?${params.toString()}`, {
+    return this.request(`/resources${encodePath(path)}?${params.toString()}`, {
       method: "PATCH",
     });
   }
 
-  async getFileContent(path: string): Promise<string> {
-    return this.request<string>(`/raw${path}`);
+  async getFileContent(path: string, signal?: AbortSignal): Promise<string> {
+    const file = await this.request<FileItem>(`/resources${encodePath(path)}`, { signal });
+    if (file.type !== "text" && file.type !== "textImmutable") {
+      throw new ApiRequestError("This file is binary or too large for the text editor (10 MB limit).");
+    }
+    return file.content || "";
   }
 
   getDownloadUrl(path: string, inline = false): string {
     const params = new URLSearchParams();
-    if (this.token) params.set("auth", this.token);
     if (inline) params.set("inline", "true");
-    return `${API_BASE}/raw${path}?${params.toString()}`;
+    return `${API_BASE}/raw${encodePath(path)}?${params.toString()}`;
   }
 
   getPreviewUrl(path: string, size: "thumb" | "big" = "thumb"): string {
     const params = new URLSearchParams();
-    if (this.token) params.set("auth", this.token);
-    return `${API_BASE}/preview/${size}${path}?${params.toString()}`;
+    return `${API_BASE}/preview/${size}${encodePath(path)}?${params.toString()}`;
+  }
+
+  getSubtitleUrl(path: string): string {
+    return `${API_BASE}/subtitle${encodePath(path)}`;
   }
 
   // Search
@@ -210,16 +228,13 @@ class ApiClient {
       (headers as Record<string, string>)["X-Auth"] = this.token;
     }
 
-    const response = await fetch(`${API_BASE}/search${path}?${params.toString()}`, {
+    const response = await fetch(`${API_BASE}/search${encodePath(path)}?${params.toString()}`, {
       method: "GET",
       headers,
     });
 
     if (!response.ok) {
-      throw {
-        message: response.statusText || "Search failed",
-        status: response.status,
-      } as ApiError;
+      throw new ApiRequestError((await response.text()).trim() || "Search failed", response.status);
     }
 
     const text = await response.text();
@@ -231,12 +246,12 @@ class ApiClient {
     const items = lines
       .map((line) => {
         try {
-          return JSON.parse(line) as { path?: string; dir?: boolean };
+          return JSON.parse(line) as { path?: string; dir?: boolean; size?: number; modified?: string; mode?: number };
         } catch {
           return null;
         }
       })
-      .filter((entry): entry is { path: string; dir?: boolean } => Boolean(entry?.path))
+      .filter((entry): entry is { path: string; dir?: boolean; size?: number; modified?: string; mode?: number } => Boolean(entry?.path))
       .map((entry) => {
         const absolutePath = this.toAbsoluteSearchPath(path, entry.path);
         const name = getFileName(absolutePath);
@@ -245,10 +260,10 @@ class ApiClient {
         return {
           path: absolutePath,
           name,
-          size: 0,
+          size: entry.size ?? 0,
           extension: getFileExtension(name),
-          modified: new Date(0).toISOString(),
-          mode: 0,
+          modified: entry.modified || "",
+          mode: entry.mode ?? 0,
           isDir,
           isSymlink: false,
           type: getFileType(name, isDir),
@@ -280,14 +295,14 @@ class ApiClient {
   }
 
   async getShares(path: string): Promise<Share[]> {
-    return this.request<Share[]>(`/share${path}`);
+    return this.request<Share[]>(`/share${encodePath(path)}`);
   }
 
   async createShare(
     path: string,
     options: { password?: string; expires?: string; unit?: string } = {},
   ): Promise<Share> {
-    return this.request<Share>(`/share${path}`, {
+    return this.request<Share>(`/share${encodePath(path)}`, {
       method: "POST",
       body: JSON.stringify(options),
     });
@@ -312,7 +327,7 @@ class ApiClient {
         encodeURIComponent(password);
     }
 
-    return this.request(`/public/share/${hash}${path}`, {
+    return this.request(`/public/share/${encodeURIComponent(hash)}${path ? encodePath(path) : ""}`, {
       headers,
     });
   }
@@ -326,7 +341,7 @@ class ApiClient {
     const params = new URLSearchParams();
     if (inline) params.set("inline", "true");
     if (token) params.set("token", token);
-    return `${API_BASE}/public/dl/${hash}${path}?${params.toString()}`;
+    return `${API_BASE}/public/dl/${encodeURIComponent(hash)}${path ? encodePath(path) : ""}?${params.toString()}`;
   }
 
   // Users
@@ -405,14 +420,14 @@ class ApiClient {
 
   // Usage
   async getUsage(): Promise<{ used: number; total: number }> {
-    return this.request("/usage");
+    return this.request("/usage/");
   }
 
   // Commands
   async runCommand(path: string, command: string): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${protocol}//${window.location.host}${API_BASE}/command${path}`);
+      const ws = new WebSocket(`${protocol}//${window.location.host}${API_BASE}/command${encodePath(path)}`);
       const output: string[] = [];
 
       ws.onopen = () => {
@@ -429,7 +444,11 @@ class ApiClient {
         reject(new Error("Command execution failed"));
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
+        if (event.code !== 1000 && event.code !== 1005) {
+          reject(new Error(event.reason || "Command execution failed"));
+          return;
+        }
         resolve(output.join("\n").trim());
       };
     });
@@ -440,7 +459,16 @@ class ApiClient {
     path: string,
     algo = "md5",
   ): Promise<Record<string, string>> {
-    return this.request(`/resources${path}?checksum=${algo}`);
+    const file = await this.request<FileItem>(`/resources${encodePath(path)}?checksum=${encodeURIComponent(algo)}`);
+    return file.checksums || {};
+  }
+
+  getUploadUrl(path: string): string {
+    return `${API_BASE}/resources${encodePath(path)}?override=false`;
+  }
+
+  async uploadFile(path: string, file: File): Promise<void> {
+    return this.request(`/resources${encodePath(path)}?override=false`, { method: "POST", body: file });
   }
 }
 

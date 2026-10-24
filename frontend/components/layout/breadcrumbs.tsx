@@ -2,6 +2,7 @@
 
 import { Link } from "react-router-dom";
 import { ChevronRight, Home } from "lucide-react";
+import { encodePath } from "@/lib/paths";
 import { cn } from "@/lib/utils";
 
 interface BreadcrumbsProps {
@@ -13,12 +14,12 @@ export function Breadcrumbs({ path, className }: BreadcrumbsProps) {
   const parts = path.split("/").filter(Boolean);
   
   const breadcrumbs = parts.map((part, index) => {
-    const href = "/files/" + parts.slice(0, index + 1).join("/") + "/";
-    return { label: decodeURIComponent(part), href };
+    const href = "/files/" + parts.slice(0, index + 1).map(encodeURIComponent).join("/") + "/";
+    return { label: part, href };
   });
 
   return (
-    <nav className={cn("flex items-center", className)}>
+    <nav className={cn("flex items-center overflow-x-auto px-4 pb-3", className)}>
       <ol className="flex items-center gap-1 pt-5 text-sm">
         <li>
           <Link

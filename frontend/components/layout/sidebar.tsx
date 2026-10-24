@@ -25,7 +25,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import useSWR from "swr";
+import api from "@/lib/api";
+import { formatBytes } from "@/lib/utils";
 
 interface NavItem {
   href: string;
@@ -52,6 +55,17 @@ export function Sidebar() {
   const isAdmin = useIsAdmin();
   const { theme, setTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
+  const { data: publicSettings } = useSWR("public-settings", () => api.getPublicSettings());
+  const { data: usage } = useSWR(publicSettings?.branding.disableUsedPercentage ? null : "disk-usage", () => api.getUsage(), { refreshInterval: 60000 });
+  const instanceName = publicSettings?.branding.name || "File Browser";
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 767px)");
+    const update = () => setCollapsed(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -59,6 +73,7 @@ export function Sidebar() {
 
   const NavLink = ({ item }: { item: NavItem }) => {
     if (item.adminOnly && !isAdmin) return null;
+    if (item.href === "/settings/shares" && !(user?.perm.share && user?.perm.download)) return null;
 
     const isActive = pathname.startsWith(item.href);
     const Icon = item.icon;
@@ -95,7 +110,7 @@ export function Sidebar() {
       <aside
         className={cn(
           "flex h-screen flex-col border-r bg-sidebar transition-all duration-300",
-          collapsed ? "w-16" : "w-64"
+          collapsed ? "w-16 shrink-0" : "w-48 shrink-0 lg:w-64"
         )}
       >
         {/* Header */}
@@ -103,13 +118,14 @@ export function Sidebar() {
           {!collapsed && (
             <Link to="/files/" className="flex items-center gap-2">
               <FolderOpen className="h-6 w-6 text-primary" />
-              <span className="font-semibold">File Browser</span>
+              <span className="truncate font-semibold">{instanceName}</span>
             </Link>
           )}
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             className={cn("h-8 w-8", collapsed && "mx-auto")}
           >
             {collapsed ? (
@@ -143,6 +159,12 @@ export function Sidebar() {
 
         {/* Footer */}
         <div className="border-t p-2">
+          {!collapsed && !publicSettings?.branding.disableUsedPercentage && usage && usage.total > 0 && (
+            <div className="space-y-2 px-3 py-2 text-xs text-muted-foreground">
+              <p>{formatBytes(usage.used)} of {formatBytes(usage.total)} used</p>
+              <progress className="h-2 w-full" value={usage.used} max={usage.total} aria-label="Disk usage" />
+            </div>
+          )}
           {/* Theme Toggle */}
           <Tooltip>
             <TooltipTrigger asChild>
@@ -150,6 +172,7 @@ export function Sidebar() {
                 variant="ghost"
                 size={collapsed ? "icon" : "default"}
                 onClick={toggleTheme}
+                aria-label="Toggle theme"
                 className={cn(
                   "w-full justify-start gap-3",
                   collapsed && "justify-center"
@@ -197,6 +220,7 @@ export function Sidebar() {
                 variant="ghost"
                 size={collapsed ? "icon" : "default"}
                 onClick={logout}
+                aria-label="Log out"
                 className={cn(
                   "w-full justify-start gap-3 text-destructive hover:bg-destructive/10 hover:text-destructive",
                   collapsed && "justify-center"

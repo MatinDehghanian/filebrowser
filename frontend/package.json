@@ -5,10 +5,12 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc --noEmit && vite build",
     "postbuild": "node scripts/ensure-out-placeholder.js",
     "preview": "vite preview",
-    "lint": "echo \"lint is not configured for Vite yet\""
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ./scripts/register-tests.mjs --test tests/*.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.0",

@@ -46,8 +46,8 @@ export function UploadDialog({
       progress: 0,
       status: "pending" as const,
     }));
-    setFiles((prev) => [...prev, ...fileArray]);
-  }, []);
+    if (!isUploading) setFiles((prev) => [...prev, ...fileArray]);
+  }, [isUploading]);
 
   const removeFile = useCallback((index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -66,6 +66,7 @@ export function UploadDialog({
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
+      e.stopPropagation();
       setIsDragging(false);
       if (e.dataTransfer.files.length > 0) {
         addFiles(e.dataTransfer.files);
@@ -78,6 +79,7 @@ export function UploadDialog({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files.length > 0) {
         addFiles(e.target.files);
+        e.target.value = "";
       }
     },
     [addFiles]
@@ -111,13 +113,16 @@ export function UploadDialog({
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            reject(new Error(xhr.statusText || "Upload failed"));
+            reject(new Error(xhr.status === 409 ? "A file with this name already exists" : xhr.responseText.trim() || xhr.statusText || "Upload failed"));
           }
         };
 
-        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.onerror = () => reject(new Error("Network error. Check your connection and retry."));
+        xhr.onabort = () => reject(new Error("Upload cancelled"));
+        xhr.ontimeout = () => reject(new Error("Upload timed out. Please retry."));
+        xhr.timeout = 30 * 60 * 1000;
 
-        xhr.open("POST", `/api/resources${filePath}?override=false`);
+        xhr.open("POST", api.getUploadUrl(filePath));
         if (token) {
           xhr.setRequestHeader("X-Auth", token);
         }
@@ -129,6 +134,7 @@ export function UploadDialog({
           i === index ? { ...f, status: "completed" as const, progress: 100 } : f
         )
       );
+      return true;
     } catch (error) {
       setFiles((prev) =>
         prev.map((f, i) =>
@@ -141,6 +147,7 @@ export function UploadDialog({
             : f
         )
       );
+      return false;
     }
   };
 
@@ -151,30 +158,24 @@ export function UploadDialog({
 
     const pendingFiles = files
       .map((f, i) => ({ file: f, index: i }))
-      .filter(({ file }) => file.status === "pending");
+      .filter(({ file }) => file.status === "pending" || file.status === "error");
 
-    // Upload files sequentially
+    let completedCount = 0;
+    let errorCount = 0;
     for (const { file, index } of pendingFiles) {
-      await uploadFile(file, index);
+      if (await uploadFile(file, index)) completedCount++;
+      else errorCount++;
     }
-
     setIsUploading(false);
-
-    const completedCount = files.filter((f) => f.status === "completed").length;
-    const errorCount = files.filter((f) => f.status === "error").length;
-
     if (completedCount > 0) {
       toast.success(`${completedCount} file(s) uploaded successfully`);
       onComplete();
     }
-
     if (errorCount > 0) {
-      toast.error(`${errorCount} file(s) failed to upload`);
-    }
-
-    // Close if all successful
-    if (errorCount === 0) {
-      handleClose();
+      toast.error(`${errorCount} file(s) failed. You can retry them.`);
+    } else {
+      setFiles([]);
+      onOpenChange(false);
     }
   };
 
@@ -185,7 +186,7 @@ export function UploadDialog({
     }
   };
 
-  const pendingCount = files.filter((f) => f.status === "pending").length;
+  const pendingCount = files.filter((f) => (f.status === "pending" || f.status === "error")).length;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -214,6 +215,7 @@ export function UploadDialog({
                 <button
                   type="button"
                   className="text-primary hover:underline"
+                  disabled={isUploading}
                   onClick={() => fileInputRef.current?.click()}
                 >
                   browse
@@ -226,6 +228,7 @@ export function UploadDialog({
             <input
               ref={fileInputRef}
               type="file"
+              disabled={isUploading}
               multiple
               className="hidden"
               onChange={handleFileSelect}
@@ -273,6 +276,7 @@ export function UploadDialog({
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
+                          disabled={isUploading}
                           onClick={() => removeFile(index)}
                         >
                           <X className="h-4 w-4" />

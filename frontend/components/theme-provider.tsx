@@ -33,7 +33,7 @@ export function ThemeProvider({
 
   React.useEffect(() => {
     const stored = localStorage.getItem("theme") as Theme | null;
-    if (stored) {
+    if (stored && ["light", "dark", "system"].includes(stored)) {
       setThemeState(stored);
     }
     setMounted(true);
@@ -71,29 +71,6 @@ export function ThemeProvider({
     localStorage.setItem("theme", newTheme);
     setThemeState(newTheme);
   }, []);
-
-  // Prevent flash of wrong theme
-  if (!mounted) {
-    return (
-      <ThemeProviderContext.Provider value={{ theme, setTheme }}>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                const stored = localStorage.getItem('theme');
-                const theme = stored || '${defaultTheme}';
-                const resolved = theme === 'system' 
-                  ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-                  : theme;
-                document.documentElement.classList.add(resolved);
-              })();
-            `,
-          }}
-        />
-        {children}
-      </ThemeProviderContext.Provider>
-    );
-  }
 
   return (
     <ThemeProviderContext.Provider value={{ theme, setTheme }}>

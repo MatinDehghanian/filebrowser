@@ -18,6 +18,9 @@ interface FileItemProps {
   onContextMenu: (item: FileItemType, event: React.MouseEvent) => void;
   showParentPath?: boolean;
   searchRootPath?: string;
+  singleClick?: boolean;
+  dateFormat?: boolean;
+  locale?: string;
 }
 
 export function FileItem({
@@ -30,6 +33,9 @@ export function FileItem({
   onContextMenu,
   showParentPath = false,
   searchRootPath = "/",
+  singleClick = false,
+  dateFormat = false,
+  locale = "en",
 }: FileItemProps) {
   const getDisplayParentPath = () => {
     const parentPath = getParentPath(item.path);
@@ -63,7 +69,7 @@ export function FileItem({
   const parentPath = getDisplayParentPath();
 
   const handleClick = (e: React.MouseEvent) => {
-    if (isTouchDevice) {
+    if ((isTouchDevice || singleClick) && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
       onOpen(item);
       return;
     }
@@ -76,6 +82,7 @@ export function FileItem({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return;
     if (e.key === "Enter") {
       onOpen(item);
     }
@@ -95,7 +102,8 @@ export function FileItem({
         role="button"
       >
         <Checkbox
-          checked={selected}
+          aria-label={`Select ${item.name}`}
+        checked={selected}
           onClick={(e) => {
             e.stopPropagation();
           }}
@@ -117,7 +125,7 @@ export function FileItem({
         </div>
         
         <div className="hidden md:block w-40 text-right text-sm text-muted-foreground">
-          {formatDate(item.modified)}
+          {formatDate(item.modified, dateFormat, locale)}
         </div>
       </div>
     );
@@ -137,6 +145,7 @@ export function FileItem({
       role="button"
     >
       <Checkbox
+        aria-label={`Select ${item.name}`}
         checked={selected}
         onClick={(e) => {
           e.stopPropagation();

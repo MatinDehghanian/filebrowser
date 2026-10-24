@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Trash2, FolderInput, Share2, Download } from "lucide-react";
+import { X, Trash2, FolderInput, Share2, Download, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface SelectionBarProps {
@@ -13,6 +13,9 @@ interface SelectionBarProps {
   canDelete?: boolean;
   canShare?: boolean;
   canDownload?: boolean;
+  canMove?: boolean;
+  canCopy?: boolean;
+  onCopy?: () => void;
 }
 
 export function SelectionBar({
@@ -25,6 +28,9 @@ export function SelectionBar({
   canDelete = true,
   canShare = true,
   canDownload = true,
+  canMove = false,
+  canCopy = false,
+  onCopy,
 }: SelectionBarProps) {
   if (selectedCount === 0) {
     return null;
@@ -39,21 +45,27 @@ export function SelectionBar({
 
         <div className="mx-1 hidden h-6 w-px bg-border sm:mx-2 sm:block" />
 
-        <Button
+        {canMove && <Button
           variant="ghost"
           size="icon"
+          aria-label="Move files"
           onClick={onMove}
           className="h-8 w-8 shrink-0 gap-2 sm:h-9 sm:w-auto sm:px-3"
         >
           <FolderInput className="h-4 w-4" />
           <span className="hidden sm:inline">Move</span>
-        </Button>
+        </Button>}
+
+        {canCopy && onCopy && <Button variant="ghost" size="sm" onClick={onCopy} aria-label="Copy files">
+          <Copy className="h-4 w-4" /><span className="hidden sm:inline">Copy</span>
+        </Button>}
 
         {canShare && selectedCount === 1 && (
           <Button
             variant="ghost"
             size="icon"
-            onClick={onShare}
+            aria-label="Share file"
+          onClick={onShare}
             className="h-8 w-8 shrink-0 gap-2 sm:h-9 sm:w-auto sm:px-3"
           >
             <Share2 className="h-4 w-4" />
@@ -65,7 +77,8 @@ export function SelectionBar({
           <Button
             variant="ghost"
             size="icon"
-            onClick={onDownload}
+            aria-label="Download selected"
+          onClick={onDownload}
             className="h-8 w-8 shrink-0 gap-2 sm:h-9 sm:w-auto sm:px-3"
           >
             <Download className="h-4 w-4" />
@@ -77,7 +90,8 @@ export function SelectionBar({
           <Button
             variant="ghost"
             size="icon"
-            onClick={onDelete}
+            aria-label="Delete selected"
+          onClick={onDelete}
             className="h-8 w-8 shrink-0 gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive sm:h-9 sm:w-auto sm:px-3"
           >
             <Trash2 className="h-4 w-4" />
@@ -90,6 +104,7 @@ export function SelectionBar({
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Clear selection"
           onClick={onClear}
           className="h-8 w-8 shrink-0"
         >
