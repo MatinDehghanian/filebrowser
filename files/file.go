@@ -337,7 +337,7 @@ func (i *FileInfo) detectSubtitles() {
 	ext := filepath.Ext(i.Path)
 
 	// detect multiple languages. Base*.vtt
-	parentDir := strings.TrimRight(i.Path, i.Name)
+	parentDir := path.Dir(i.Path)
 	var dir []os.FileInfo
 	if len(i.currentDir) > 0 {
 		dir = i.currentDir

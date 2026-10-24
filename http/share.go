@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	fberrors "github.com/MatinDehghanian/filebrowser/v2/errors"
+	"github.com/MatinDehghanian/filebrowser/v2/files"
 	"github.com/MatinDehghanian/filebrowser/v2/share"
 )
 
@@ -91,6 +93,9 @@ var shareDeleteHandler = withPermShare(func(_ http.ResponseWriter, r *http.Reque
 })
 
 var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	if _, err := files.NewFileInfo(&files.FileOptions{Fs: d.user.Fs, Path: r.URL.Path, Checker: d}); err != nil {
+		return errToStatus(err), err
+	}
 	var s *share.Link
 	var body share.CreateBody
 	if r.Body != nil {
@@ -112,23 +117,27 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 
 	if body.Expires != "" {
 		num, err := strconv.Atoi(body.Expires)
-		if err != nil {
-			return http.StatusInternalServerError, err
+		if err != nil || num <= 0 {
+			return http.StatusBadRequest, fberrors.ErrInvalidRequestParams
 		}
 
-		var add time.Duration
+		var unit time.Duration
 		switch body.Unit {
 		case "seconds":
-			add = time.Second * time.Duration(num)
+			unit = time.Second
 		case "minutes":
-			add = time.Minute * time.Duration(num)
+			unit = time.Minute
 		case "days":
-			add = time.Hour * 24 * time.Duration(num)
+			unit = time.Hour * 24
+		case "hours", "":
+			unit = time.Hour
 		default:
-			add = time.Hour * time.Duration(num)
+			return http.StatusBadRequest, fberrors.ErrInvalidRequestParams
 		}
-
-		expire = time.Now().Add(add).Unix()
+		if int64(num) > math.MaxInt64/int64(unit) {
+			return http.StatusBadRequest, fberrors.ErrInvalidRequestParams
+		}
+		expire = time.Now().Add(unit * time.Duration(num)).Unix()
 	}
 
 	hash, status, err := getSharePasswordHash(body)

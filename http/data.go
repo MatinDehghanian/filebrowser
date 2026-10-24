@@ -3,7 +3,9 @@ package fbhttp
 import (
 	"log"
 	"net/http"
+	pathpkg "path"
 	"strconv"
+	"strings"
 
 	"github.com/tomasen/realip"
 
@@ -18,15 +20,22 @@ type handleFunc func(w http.ResponseWriter, r *http.Request, d *data) (int, erro
 
 type data struct {
 	*runner.Runner
-	settings *settings.Settings
-	server   *settings.Server
-	store    *storage.Storage
-	user     *users.User
-	raw      interface{}
+	settings    *settings.Settings
+	server      *settings.Server
+	store       *storage.Storage
+	user        *users.User
+	scopePrefix string
+	raw         interface{}
 }
 
 // Check implements rules.Checker.
 func (d *data) Check(path string) bool {
+	if strings.HasPrefix(pathpkg.Base(path), ".filebrowser-tus-") {
+		return false
+	}
+	if d.scopePrefix != "" {
+		path = pathpkg.Join(d.scopePrefix, path)
+	}
 	if d.user.HideDotfiles && rules.MatchHidden(path) {
 		return false
 	}
@@ -55,7 +64,8 @@ func handle(fn handleFunc, prefix string, store *storage.Storage, server *settin
 
 		settings, err := store.Settings.Get()
 		if err != nil {
-			log.Fatalf("ERROR: couldn't get settings: %v\n", err)
+			log.Printf("ERROR: couldn't get settings: %v", err)
+			http.Error(w, "Unable to load settings", http.StatusInternalServerError)
 			return
 		}
 
@@ -71,13 +81,16 @@ func handle(fn handleFunc, prefix string, store *storage.Storage, server *settin
 			log.Printf("%s: %v %s %v", r.URL.Path, status, clientIP, err)
 		}
 
-		if status != 0 {
+		if status >= 400 {
 			txt := http.StatusText(status)
 			if status == http.StatusBadRequest && err != nil {
 				txt += " (" + err.Error() + ")"
 			}
 			http.Error(w, strconv.Itoa(status)+" "+txt, status)
 			return
+		}
+		if status != 0 {
+			w.WriteHeader(status)
 		}
 	})
 

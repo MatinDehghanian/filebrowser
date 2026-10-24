@@ -81,7 +81,7 @@ func setContentDisposition(w http.ResponseWriter, r *http.Request, file *files.F
 
 var rawHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	if !d.user.Perm.Download {
-		return http.StatusAccepted, nil
+		return http.StatusForbidden, nil
 	}
 
 	file, err := files.NewFileInfo(&files.FileOptions{

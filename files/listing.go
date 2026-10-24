@@ -69,7 +69,7 @@ func (l byName) Less(i, j int) bool {
 		return !l.Sorting.Asc
 	}
 
-	return natural.Less(strings.ToLower(l.Items[j].Name), strings.ToLower(l.Items[i].Name))
+	return natural.Less(strings.ToLower(l.Items[i].Name), strings.ToLower(l.Items[j].Name))
 }
 
 // By Size

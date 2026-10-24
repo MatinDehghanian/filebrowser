@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -96,11 +95,6 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			return errToStatus(err), err
 		}
 
-		err = d.store.Share.DeleteWithPathPrefix(file.Path)
-		if err != nil {
-			log.Printf("WARNING: Error(s) occurred while deleting associated shares with file: %s", err)
-		}
-
 		// delete thumbnails
 		err = delThumbs(r.Context(), fileCache, file)
 		if err != nil {
@@ -115,6 +109,9 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			return errToStatus(err), err
 		}
 
+		if err := d.store.Share.UpdateUserPaths(d.user.ID, file.Path, ""); err != nil {
+			log.Printf("WARNING: could not remove associated shares: %v", err)
+		}
 		return http.StatusNoContent, nil
 	})
 }
@@ -127,6 +124,11 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 
 		// Directories creation on POST.
 		if strings.HasSuffix(r.URL.Path, "/") {
+			if _, err := d.user.Fs.Stat(r.URL.Path); err == nil {
+				return http.StatusConflict, nil
+			} else if !os.IsNotExist(err) {
+				return errToStatus(err), err
+			}
 			err := d.user.Fs.MkdirAll(r.URL.Path, d.settings.DirMode)
 			return errToStatus(err), err
 		}
@@ -140,6 +142,9 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			Checker:    d,
 		})
 		if err == nil {
+			if file.IsDir {
+				return http.StatusConflict, nil
+			}
 			if r.URL.Query().Get("override") != "true" {
 				return http.StatusConflict, nil
 			}
@@ -153,6 +158,8 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			if err != nil {
 				return errToStatus(err), err
 			}
+		} else if !os.IsNotExist(err) {
+			return errToStatus(err), err
 		}
 
 		err = d.RunHook(func() error {
@@ -165,10 +172,6 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			w.Header().Set("ETag", etag)
 			return nil
 		}, "upload", r.URL.Path, "", d.user)
-
-		if err != nil {
-			_ = d.user.Fs.RemoveAll(r.URL.Path)
-		}
 
 		return errToStatus(err), err
 	})
@@ -211,30 +214,43 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		src := r.URL.Path
 		dst := r.URL.Query().Get("destination")
 		action := r.URL.Query().Get("action")
-		dst, err := url.QueryUnescape(dst)
+		if dst == "" || (action != "copy" && action != "rename" && action != "move") {
+			return http.StatusBadRequest, fberrors.ErrInvalidRequestParams
+		}
 		dst = path.Clean("/" + dst)
 		src = path.Clean("/" + src)
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
 		}
-		if err != nil {
-			return errToStatus(err), err
-		}
 		if dst == "/" || src == "/" {
 			return http.StatusForbidden, nil
 		}
 
-		err = checkParent(src, dst)
+		err := checkParent(src, dst)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
 
-		srcInfo, _ := d.user.Fs.Stat(src)
+		srcInfo, err := d.user.Fs.Stat(src)
+		if err != nil {
+			return errToStatus(err), err
+		}
 		dstInfo, _ := d.user.Fs.Stat(dst)
 		same := os.SameFile(srcInfo, dstInfo)
 
-		if action != "rename" || !same {
-			override := r.URL.Query().Get("override") == "true"
+		if src == dst || same {
+			if action == "rename" || action == "move" {
+				return http.StatusOK, nil
+			}
+			if r.URL.Query().Get("rename") == "true" {
+				dst = addVersionSuffix(dst, d.user.Fs)
+				same = false
+			} else {
+				return http.StatusBadRequest, fberrors.ErrInvalidRequestParams
+			}
+		}
+		if !same {
+			override := r.URL.Query().Get("override") == "true" || r.URL.Query().Get("overwrite") == "true"
 			rename := r.URL.Query().Get("rename") == "true"
 			if !override && !rename {
 				if _, err = d.user.Fs.Stat(dst); err == nil {
@@ -253,6 +269,11 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		err = d.RunHook(func() error {
 			return patchAction(r.Context(), action, src, dst, d, fileCache)
 		}, action, src, dst, d.user)
+		if err == nil && (action == "rename" || action == "move") {
+			if shareErr := d.store.Share.UpdateUserPaths(d.user.ID, src, dst); shareErr != nil {
+				log.Printf("WARNING: could not update associated shares: %v", shareErr)
+			}
+		}
 
 		return errToStatus(err), err
 	})
@@ -297,11 +318,28 @@ func writeFile(afs afero.Fs, dst string, in io.Reader, fileMode, dirMode fs.File
 		return nil, err
 	}
 
-	file, err := afs.OpenFile(dst, os.O_RDWR|os.O_CREATE|os.O_TRUNC, fileMode)
+	// Write beside the destination and replace it only after a complete write.
+	// A failed upload or editor save must leave the original contents intact.
+	if info, statErr := afs.Stat(dst); statErr == nil {
+		if info.IsDir() {
+			return nil, fberrors.ErrIsDirectory
+		}
+		fileMode = info.Mode().Perm()
+	} else if !os.IsNotExist(statErr) {
+		return nil, statErr
+	}
+	file, err := afero.TempFile(afs, dir, ".filebrowser-upload-*")
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	tempName := file.Name()
+	defer func() {
+		_ = file.Close()
+		_ = afs.Remove(tempName)
+	}()
+	if err := afs.Chmod(tempName, fileMode); err != nil {
+		return nil, err
+	}
 
 	_, err = io.Copy(file, in)
 	if err != nil {
@@ -320,6 +358,12 @@ func writeFile(afs afero.Fs, dst string, in io.Reader, fileMode, dirMode fs.File
 		return nil, err
 	}
 
+	if err := file.Close(); err != nil {
+		return nil, err
+	}
+	if err := afs.Rename(tempName, dst); err != nil {
+		return nil, err
+	}
 	return info, nil
 }
 
@@ -342,7 +386,7 @@ func patchAction(ctx context.Context, action, src, dst string, d *data, fileCach
 		}
 
 		return fileutils.Copy(d.user.Fs, src, dst, d.settings.FileMode, d.settings.DirMode)
-	case "rename":
+	case "rename", "move":
 		if !d.user.Perm.Rename {
 			return fberrors.ErrPermissionDenied
 		}

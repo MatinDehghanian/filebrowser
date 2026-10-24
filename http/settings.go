@@ -43,7 +43,15 @@ var settingsGetHandler = withAdmin(func(w http.ResponseWriter, r *http.Request, 
 })
 
 var settingsPutHandler = withAdmin(func(_ http.ResponseWriter, r *http.Request, d *data) (int, error) {
-	req := &settingsData{}
+	// Decode over the current values so partial updates preserve other fields,
+	// including nested defaults and branding options.
+	req := &settingsData{
+		Signup: d.settings.Signup, HideLoginButton: d.settings.HideLoginButton,
+		CreateUserDir: d.settings.CreateUserDir, MinimumPasswordLength: d.settings.MinimumPasswordLength,
+		UserHomeBasePath: d.settings.UserHomeBasePath, Defaults: d.settings.Defaults,
+		AuthMethod: d.settings.AuthMethod, Rules: d.settings.Rules, Branding: d.settings.Branding,
+		Tus: d.settings.Tus, Shell: d.settings.Shell, Commands: d.settings.Commands,
+	}
 	err := json.NewDecoder(r.Body).Decode(req)
 	if err != nil {
 		return http.StatusBadRequest, err

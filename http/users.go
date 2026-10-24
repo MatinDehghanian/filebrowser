@@ -47,7 +47,7 @@ func getUser(_ http.ResponseWriter, r *http.Request) (*modifyUserRequest, error)
 		return nil, err
 	}
 
-	if req.What != "user" {
+	if req.What != "user" || req.Data == nil {
 		return nil, fberrors.ErrInvalidDataType
 	}
 
@@ -166,7 +166,7 @@ var userPostHandler = withAdmin(func(w http.ResponseWriter, r *http.Request, d *
 
 	err = d.store.Users.Save(req.Data)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return errToStatus(err), err
 	}
 
 	w.Header().Set("Location", "/settings/users/"+strconv.FormatUint(uint64(req.Data.ID), 10))
@@ -185,7 +185,7 @@ var userPutHandler = withSelfOrAdmin(func(w http.ResponseWriter, r *http.Request
 			"username":     {},
 			"password":     {},
 			"scope":        {},
-			"lockPassword": {},
+			"lockpassword": {},
 			"commands":     {},
 			"perm":         {},
 		}
@@ -250,7 +250,7 @@ var userPutHandler = withSelfOrAdmin(func(w http.ResponseWriter, r *http.Request
 
 	err = d.store.Users.Update(req.Data, req.Which...)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return errToStatus(err), err
 	}
 
 	return http.StatusOK, nil

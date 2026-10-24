@@ -94,6 +94,9 @@ func handleWithStaticData(w http.ResponseWriter, _ *http.Request, d *data, fSys 
 		}
 		return http.StatusInternalServerError, err
 	}
+	fileContents = []byte(strings.ReplaceAll(string(fileContents), "/static/", path.Join(d.server.BaseURL, "/static")+"/"))
+	fileContents = []byte(strings.ReplaceAll(string(fileContents), `src="/runtime-config.js"`, `src="`+path.Join(d.server.BaseURL, "/runtime-config.js")+`"`))
+	fileContents = []byte(strings.NewReplacer(`src="./assets/`, `src="`+path.Join(d.server.BaseURL, "/static/assets")+`/`, `href="./assets/`, `href="`+path.Join(d.server.BaseURL, "/static/assets")+`/`).Replace(string(fileContents)))
 	index := template.Must(template.New("index").Delims("[{[", "]}]").Parse(string(fileContents)))
 	err = index.Execute(w, data)
 	if err != nil {

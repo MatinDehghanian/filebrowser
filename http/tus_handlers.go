@@ -1,6 +1,7 @@
 package fbhttp
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -11,19 +12,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/afero"
-
 	"github.com/MatinDehghanian/filebrowser/v2/files"
 )
 
-// keepUploadActive periodically touches the cache entry to prevent eviction during transfer
+// keepUploadActive periodically touches the cache entry to prevent eviction during transfer.
 func keepUploadActive(cache UploadCache, filePath string) func() {
-	stop := make(chan bool)
-
+	stop := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(2 * time.Second)
 		defer ticker.Stop()
-
 		for {
 			select {
 			case <-stop:
@@ -33,10 +30,23 @@ func keepUploadActive(cache UploadCache, filePath string) func() {
 			}
 		}
 	}()
+	return func() { close(stop) }
+}
 
-	return func() {
-		close(stop)
+// Resumable uploads are staged beside the destination. An interrupted upload,
+// cancellation, or cache eviction must never truncate or delete an existing file.
+func tusStagingPath(destination string) string {
+	name := fmt.Sprintf(".filebrowser-tus-%x", sha256.Sum256([]byte(filepath.Clean(destination))))
+	return filepath.Join(filepath.Dir(destination), name)
+}
+
+func tusStagingFile(d *data, destination string) (*files.FileInfo, error) {
+	staging := tusStagingPath(destination)
+	info, err := d.user.Fs.Stat(staging)
+	if err != nil {
+		return nil, err
 	}
+	return &files.FileInfo{Fs: d.user.Fs, Path: staging, Name: info.Name(), Size: info.Size(), IsDir: info.IsDir()}, nil
 }
 
 func tusPostHandler(cache UploadCache) handleFunc {
@@ -44,79 +54,45 @@ func tusPostHandler(cache UploadCache) handleFunc {
 		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
 		}
-		file, err := files.NewFileInfo(&files.FileOptions{
-			Fs:         d.user.Fs,
-			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
-			Expand:     false,
-			ReadHeader: d.server.TypeDetectionByHeader,
-			Checker:    d,
-		})
-		switch {
-		case errors.Is(err, afero.ErrFileNotFound):
-			dirPath := filepath.Dir(r.URL.Path)
-			if _, statErr := d.user.Fs.Stat(dirPath); os.IsNotExist(statErr) {
-				if mkdirErr := d.user.Fs.MkdirAll(dirPath, d.settings.DirMode); mkdirErr != nil {
-					return http.StatusInternalServerError, err
-				}
-			}
-		case err != nil:
-			return errToStatus(err), err
+		uploadLength, err := getUploadLength(r)
+		if err != nil {
+			return http.StatusBadRequest, err
 		}
-
-		fileFlags := os.O_CREATE | os.O_WRONLY
-
-		// if file exists
-		if file != nil {
-			if file.IsDir {
-				return http.StatusBadRequest, fmt.Errorf("cannot upload to a directory %s", file.RealPath())
+		if info, err := d.user.Fs.Stat(r.URL.Path); err == nil {
+			if info.IsDir() {
+				return http.StatusBadRequest, fmt.Errorf("cannot upload to a directory")
 			}
-
-			// Existing files will remain untouched unless explicitly instructed to override
 			if r.URL.Query().Get("override") != "true" {
 				return http.StatusConflict, nil
 			}
-
-			// Permission for overwriting the file
 			if !d.user.Perm.Modify {
 				return http.StatusForbidden, nil
 			}
-
-			fileFlags |= os.O_TRUNC
+		} else if !os.IsNotExist(err) {
+			return errToStatus(err), err
 		}
-
-		openFile, err := d.user.Fs.OpenFile(r.URL.Path, fileFlags, d.settings.FileMode)
+		if err := d.user.Fs.MkdirAll(filepath.Dir(r.URL.Path), d.settings.DirMode); err != nil {
+			return errToStatus(err), err
+		}
+		staging := tusStagingPath(r.URL.Path)
+		file, err := d.user.Fs.OpenFile(staging, os.O_CREATE|os.O_EXCL|os.O_WRONLY, d.settings.FileMode)
 		if err != nil {
 			return errToStatus(err), err
 		}
-		defer openFile.Close()
-
-		file, err = files.NewFileInfo(&files.FileOptions{
-			Fs:         d.user.Fs,
-			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
-			Expand:     false,
-			ReadHeader: false,
-			Checker:    d,
-			Content:    false,
-		})
-		if err != nil {
+		if err := file.Close(); err != nil {
+			_ = d.user.Fs.Remove(staging)
 			return errToStatus(err), err
 		}
-
-		uploadLength, err := getUploadLength(r)
-		if err != nil {
-			return http.StatusBadRequest, fmt.Errorf("invalid upload length: %w", err)
+		if uploadLength == 0 {
+			if err := d.user.Fs.Rename(staging, r.URL.Path); err != nil {
+				_ = d.user.Fs.Remove(staging)
+				return errToStatus(err), err
+			}
+		} else {
+			staged := &files.FileInfo{Fs: d.user.Fs, Path: staging}
+			cache.Register(staged.RealPath(), uploadLength)
 		}
-
-		// Enables the user to utilize the PATCH endpoint for uploading file data
-		cache.Register(file.RealPath(), uploadLength)
-
-		basePath := "/" + strings.Trim(strings.TrimSpace(d.server.BaseURL), "/")
-		if basePath == "/" {
-			basePath = ""
-		}
-
+		basePath := strings.TrimRight(d.server.BaseURL, "/")
 		w.Header().Set("Location", basePath+"/api/tus"+r.URL.EscapedPath())
 		return http.StatusCreated, nil
 	})
@@ -128,27 +104,16 @@ func tusHeadHandler(cache UploadCache) handleFunc {
 		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
 		}
-
-		file, err := files.NewFileInfo(&files.FileOptions{
-			Fs:         d.user.Fs,
-			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
-			Expand:     false,
-			ReadHeader: d.server.TypeDetectionByHeader,
-			Checker:    d,
-		})
+		file, err := tusStagingFile(d, r.URL.Path)
 		if err != nil {
 			return errToStatus(err), err
 		}
-
-		uploadLength, err := cache.GetLength(file.RealPath())
+		length, err := cache.GetLength(file.RealPath())
 		if err != nil {
 			return http.StatusNotFound, err
 		}
-
 		w.Header().Set("Upload-Offset", strconv.FormatInt(file.Size, 10))
-		w.Header().Set("Upload-Length", strconv.FormatInt(uploadLength, 10))
-
+		w.Header().Set("Upload-Length", strconv.FormatInt(length, 10))
 		return http.StatusOK, nil
 	})
 }
@@ -161,129 +126,98 @@ func tusPatchHandler(cache UploadCache) handleFunc {
 		if r.Header.Get("Content-Type") != "application/offset+octet-stream" {
 			return http.StatusUnsupportedMediaType, nil
 		}
-
-		uploadOffset, err := getUploadOffset(r)
+		offset, err := getUploadOffset(r)
 		if err != nil {
-			return http.StatusBadRequest, fmt.Errorf("invalid upload offset")
+			return http.StatusBadRequest, err
 		}
-
-		file, err := files.NewFileInfo(&files.FileOptions{
-			Fs:         d.user.Fs,
-			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
-			Expand:     false,
-			ReadHeader: d.server.TypeDetectionByHeader,
-			Checker:    d,
-		})
-
-		switch {
-		case errors.Is(err, afero.ErrFileNotFound):
-			return http.StatusNotFound, nil
-		case err != nil:
+		file, err := tusStagingFile(d, r.URL.Path)
+		if err != nil {
 			return errToStatus(err), err
 		}
-
-		uploadLength, err := cache.GetLength(file.RealPath())
+		length, err := cache.GetLength(file.RealPath())
 		if err != nil {
 			return http.StatusNotFound, err
 		}
-
-		// Prevent the upload from being evicted during the transfer
+		if file.Size != offset || offset > length {
+			return http.StatusConflict, fmt.Errorf("upload offset does not match the uploaded size")
+		}
 		stop := keepUploadActive(cache, file.RealPath())
 		defer stop()
-
-		switch {
-		case file.IsDir:
-			return http.StatusBadRequest, fmt.Errorf("cannot upload to a directory %s", file.RealPath())
-		case file.Size != uploadOffset:
-			return http.StatusConflict, fmt.Errorf(
-				"%s file size doesn't match the provided offset: %d",
-				file.RealPath(),
-				uploadOffset,
-			)
-		}
-
-		openFile, err := d.user.Fs.OpenFile(r.URL.Path, os.O_WRONLY|os.O_APPEND, d.settings.FileMode)
+		output, err := d.user.Fs.OpenFile(file.Path, os.O_WRONLY, d.settings.FileMode)
 		if err != nil {
-			return http.StatusInternalServerError, fmt.Errorf("could not open file: %w", err)
+			return errToStatus(err), err
 		}
-		defer openFile.Close()
-
-		_, err = openFile.Seek(uploadOffset, 0)
+		defer output.Close()
+		if _, err := output.Seek(offset, io.SeekStart); err != nil {
+			return errToStatus(err), err
+		}
+		// Probe one byte beyond the declared length, then roll the chunk back if needed.
+		remaining := length - offset
+		written, err := io.Copy(output, io.LimitReader(r.Body, remaining))
+		if err == nil && written == remaining {
+			var extra [1]byte
+			n, readErr := io.ReadFull(r.Body, extra[:])
+			if n > 0 {
+				err = fmt.Errorf("upload exceeds the declared length")
+			} else if readErr != nil && !errors.Is(readErr, io.EOF) {
+				err = readErr
+			}
+		}
 		if err != nil {
-			return http.StatusInternalServerError, fmt.Errorf("could not seek file: %w", err)
+			_ = output.Truncate(offset)
+			return http.StatusBadRequest, err
 		}
-
-		defer r.Body.Close()
-		bytesWritten, err := io.Copy(openFile, r.Body)
-		if err != nil {
-			return http.StatusInternalServerError, fmt.Errorf("could not write to file: %w", err)
+		if err := output.Sync(); err != nil {
+			_ = output.Truncate(offset)
+			return errToStatus(err), err
 		}
-
-		// Sync the file to ensure all data is written to storage
-		// to prevent file corruption.
-		if err := openFile.Sync(); err != nil {
-			return http.StatusInternalServerError, fmt.Errorf("could not sync file: %w", err)
+		if err := output.Close(); err != nil {
+			return errToStatus(err), err
 		}
-
-		newOffset := uploadOffset + bytesWritten
-		w.Header().Set("Upload-Offset", strconv.FormatInt(newOffset, 10))
-
-		if newOffset >= uploadLength {
+		newOffset := offset + written
+		if newOffset == length {
+			if _, err := d.user.Fs.Stat(r.URL.Path); err == nil && !d.user.Perm.Modify {
+				return http.StatusForbidden, nil
+			}
+			if err := d.user.Fs.Rename(file.Path, r.URL.Path); err != nil {
+				return errToStatus(err), err
+			}
 			cache.Complete(file.RealPath())
-			_ = d.RunHook(func() error { return nil }, "upload", r.URL.Path, "", d.user)
+			if err := d.RunHook(func() error { return nil }, "upload", r.URL.Path, "", d.user); err != nil {
+				return errToStatus(err), err
+			}
 		}
-
+		w.Header().Set("Upload-Offset", strconv.FormatInt(newOffset, 10))
 		return http.StatusNoContent, nil
 	})
 }
 
 func tusDeleteHandler(cache UploadCache) handleFunc {
 	return withUser(func(_ http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if r.URL.Path == "/" || !d.user.Perm.Delete {
+		if r.URL.Path == "/" || !d.user.Perm.Delete || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
 		}
-
-		file, err := files.NewFileInfo(&files.FileOptions{
-			Fs:         d.user.Fs,
-			Path:       r.URL.Path,
-			Modify:     d.user.Perm.Modify,
-			Expand:     false,
-			ReadHeader: d.server.TypeDetectionByHeader,
-			Checker:    d,
-		})
+		file, err := tusStagingFile(d, r.URL.Path)
 		if err != nil {
 			return errToStatus(err), err
 		}
-
-		_, err = cache.GetLength(file.RealPath())
-		if err != nil {
+		if _, err := cache.GetLength(file.RealPath()); err != nil {
 			return http.StatusNotFound, err
 		}
-
-		err = d.user.Fs.RemoveAll(r.URL.Path)
-		if err != nil {
+		if err := d.user.Fs.Remove(file.Path); err != nil {
 			return errToStatus(err), err
 		}
-
 		cache.Complete(file.RealPath())
-
 		return http.StatusNoContent, nil
 	})
 }
 
-func getUploadLength(r *http.Request) (int64, error) {
-	uploadOffset, err := strconv.ParseInt(r.Header.Get("Upload-Length"), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid upload length: %w", err)
+func getUploadLength(r *http.Request) (int64, error) { return uploadIntegerHeader(r, "Upload-Length") }
+func getUploadOffset(r *http.Request) (int64, error) { return uploadIntegerHeader(r, "Upload-Offset") }
+func uploadIntegerHeader(r *http.Request, name string) (int64, error) {
+	value, err := strconv.ParseInt(r.Header.Get(name), 10, 64)
+	if err != nil || value < 0 {
+		return 0, fmt.Errorf("invalid %s: expected a non-negative integer", name)
 	}
-	return uploadOffset, nil
-}
-
-func getUploadOffset(r *http.Request) (int64, error) {
-	uploadOffset, err := strconv.ParseInt(r.Header.Get("Upload-Offset"), 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid upload offset: %w", err)
-	}
-	return uploadOffset, nil
+	return value, nil
 }

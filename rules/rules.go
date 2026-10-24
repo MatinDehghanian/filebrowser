@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // Checker is a Rules checker.
@@ -39,12 +40,17 @@ func (r *Rule) Matches(path string) bool {
 type Regexp struct {
 	Raw    string `json:"raw"`
 	regexp *regexp.Regexp
+	once   sync.Once
 }
 
 // MatchString checks if a string matches the regexp.
 func (r *Regexp) MatchString(s string) bool {
+	if r == nil {
+		return false
+	}
+	r.once.Do(func() { r.regexp, _ = regexp.Compile(r.Raw) })
 	if r.regexp == nil {
-		r.regexp = regexp.MustCompile(r.Raw)
+		return false
 	}
 
 	return r.regexp.MatchString(s)

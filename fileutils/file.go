@@ -1,11 +1,12 @@
 package fileutils
 
 import (
+	"errors"
 	"io"
 	"io/fs"
-	"os"
 	"path"
 	"path/filepath"
+	"syscall"
 
 	"github.com/spf13/afero"
 )
@@ -14,13 +15,19 @@ import (
 // By default the rename filesystem system call is used. If src and dst point to different volumes
 // the file copy is used as a fallback
 func MoveFile(afs afero.Fs, src, dst string, fileMode, dirMode fs.FileMode) error {
-	if afs.Rename(src, dst) == nil {
+	if err := afs.MkdirAll(filepath.Dir(dst), dirMode); err != nil {
+		return err
+	}
+	err := afs.Rename(src, dst)
+	if err == nil {
 		return nil
 	}
+	if !errors.Is(err, syscall.EXDEV) {
+		return err
+	}
 	// fallback
-	err := Copy(afs, src, dst, fileMode, dirMode)
+	err = Copy(afs, src, dst, fileMode, dirMode)
 	if err != nil {
-		_ = afs.Remove(dst)
 		return err
 	}
 	if err := afs.RemoveAll(src); err != nil {
@@ -31,7 +38,7 @@ func MoveFile(afs afero.Fs, src, dst string, fileMode, dirMode fs.FileMode) erro
 
 // CopyFile copies a file from source to dest and returns
 // an error if any.
-func CopyFile(afs afero.Fs, source, dest string, fileMode, dirMode fs.FileMode) error {
+func CopyFile(afs afero.Fs, source, dest string, _ fs.FileMode, dirMode fs.FileMode) error {
 	// Open the source file.
 	src, err := afs.Open(source)
 	if err != nil {
@@ -47,11 +54,15 @@ func CopyFile(afs afero.Fs, source, dest string, fileMode, dirMode fs.FileMode) 
 	}
 
 	// Create the destination file.
-	dst, err := afs.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, fileMode)
+	dst, err := afero.TempFile(afs, filepath.Dir(dest), ".filebrowser-copy-*")
 	if err != nil {
 		return err
 	}
-	defer dst.Close()
+	tempName := dst.Name()
+	defer func() {
+		_ = dst.Close()
+		_ = afs.Remove(tempName)
+	}()
 
 	// Copy the contents of the file.
 	_, err = io.Copy(dst, src)
@@ -64,12 +75,18 @@ func CopyFile(afs afero.Fs, source, dest string, fileMode, dirMode fs.FileMode) 
 	if err != nil {
 		return err
 	}
-	err = afs.Chmod(dest, info.Mode())
+	err = afs.Chmod(tempName, info.Mode())
 	if err != nil {
 		return err
 	}
 
-	return nil
+	if err := dst.Sync(); err != nil {
+		return err
+	}
+	if err := dst.Close(); err != nil {
+		return err
+	}
+	return afs.Rename(tempName, dest)
 }
 
 // CommonPrefix returns common directory path of provided files

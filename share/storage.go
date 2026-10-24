@@ -1,6 +1,8 @@
 package share
 
 import (
+	"errors"
+	"strings"
 	"time"
 
 	fberrors "github.com/MatinDehghanian/filebrowser/v2/errors"
@@ -36,16 +38,22 @@ func (s *Storage) All() ([]*Link, error) {
 		return nil, err
 	}
 
-	for i, link := range links {
+	return s.withoutExpired(links)
+}
+
+func (s *Storage) withoutExpired(links []*Link) ([]*Link, error) {
+	active := make([]*Link, 0, len(links))
+	for _, link := range links {
 		if link.Expire != 0 && link.Expire <= time.Now().Unix() {
 			if err := s.Delete(link.Hash); err != nil {
 				return nil, err
 			}
-			links = append(links[:i], links[i+1:]...)
+			continue
 		}
+		active = append(active, link)
 	}
 
-	return links, nil
+	return active, nil
 }
 
 // FindByUserID wraps a StorageBackend.FindByUserID.
@@ -56,16 +64,7 @@ func (s *Storage) FindByUserID(id uint) ([]*Link, error) {
 		return nil, err
 	}
 
-	for i, link := range links {
-		if link.Expire != 0 && link.Expire <= time.Now().Unix() {
-			if err := s.Delete(link.Hash); err != nil {
-				return nil, err
-			}
-			links = append(links[:i], links[i+1:]...)
-		}
-	}
-
-	return links, nil
+	return s.withoutExpired(links)
 }
 
 // GetByHash wraps a StorageBackend.GetByHash.
@@ -98,16 +97,7 @@ func (s *Storage) Gets(path string, id uint) ([]*Link, error) {
 		return nil, err
 	}
 
-	for i, link := range links {
-		if link.Expire != 0 && link.Expire <= time.Now().Unix() {
-			if err := s.Delete(link.Hash); err != nil {
-				return nil, err
-			}
-			links = append(links[:i], links[i+1:]...)
-		}
-	}
-
-	return links, nil
+	return s.withoutExpired(links)
 }
 
 // Save wraps a StorageBackend.Save
@@ -122,4 +112,32 @@ func (s *Storage) Delete(hash string) error {
 
 func (s *Storage) DeleteWithPathPrefix(path string) error {
 	return s.back.DeleteWithPathPrefix(path)
+}
+
+// UpdateUserPaths keeps other users' links and similarly named siblings intact.
+// An empty destination deletes links associated with the removed resource.
+func (s *Storage) UpdateUserPaths(userID uint, source, destination string) error {
+	links, err := s.FindByUserID(userID)
+	if errors.Is(err, fberrors.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	source = strings.TrimRight(source, "/")
+	for _, link := range links {
+		if link.Path != source && !strings.HasPrefix(link.Path, source+"/") {
+			continue
+		}
+		if destination == "" {
+			err = s.Delete(link.Hash)
+		} else {
+			link.Path = strings.TrimRight(destination, "/") + strings.TrimPrefix(link.Path, source)
+			err = s.Save(link)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -108,7 +108,7 @@ To run File Browser for the first time, simply execute the command:
 filebrowser
 ```
 
-By default, it will listen on port `8080`. You can access it at `http://localhost:8080`. The default username and password are `admin` and `admin`.
+By default, it listens on port `8080`. Open `http://localhost:8080` and sign in as `admin` using the random password printed during the first startup. To choose an initial password, use `--password` (at least 12 characters). An existing bcrypt hash is also accepted.
 
 You can specify a different port with the `-p` flag:
 

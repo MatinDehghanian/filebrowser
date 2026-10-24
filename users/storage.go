@@ -74,6 +74,22 @@ func (s *Storage) Gets(baseScope string) ([]*User, error) {
 
 // Update updates a user in the database.
 func (s *Storage) Update(user *User, fields ...string) error {
+	// Keep at least one administrator who can manage the instance.
+	updatesPermissions := len(fields) == 0
+	for _, field := range fields {
+		if field == "Perm" {
+			updatesPermissions = true
+		}
+	}
+	if updatesPermissions && !user.Perm.Admin {
+		previous, err := s.back.GetBy(user.ID)
+		if err != nil {
+			return err
+		}
+		if s.IsUniqueAdmin(previous) {
+			return fberrors.ErrRootUserDeletion
+		}
+	}
 	err := user.Clean("", fields...)
 	if err != nil {
 		return err

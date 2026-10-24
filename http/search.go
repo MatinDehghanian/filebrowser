@@ -62,8 +62,11 @@ var searchHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *dat
 		select {
 		case <-ctx.Done():
 		case response <- map[string]interface{}{
-			"dir":  f.IsDir(),
-			"path": path,
+			"dir":      f.IsDir(),
+			"path":     path,
+			"size":     f.Size(),
+			"modified": f.ModTime(),
+			"mode":     f.Mode(),
 		}:
 		}
 		return context.Cause(ctx)

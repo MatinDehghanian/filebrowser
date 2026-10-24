@@ -63,6 +63,7 @@ var withHashFile = func(fn handleFunc) handleFunc {
 
 		// set fs root to the shared file/folder
 		d.user.Fs = afero.NewBasePathFs(d.user.Fs, basePath)
+		d.scopePrefix = basePath
 
 		file, err = files.NewFileInfo(&files.FileOptions{
 			Fs:      d.user.Fs,
@@ -109,7 +110,7 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 	}
 
 	if file.IsDir {
-		file.Sorting = files.Sorting{By: "name", Asc: false}
+		file.Sorting = files.Sorting{By: "name", Asc: true}
 		file.ApplySort()
 		return renderJSON(w, r, file)
 	}
@@ -134,7 +135,7 @@ func authenticateShareRequest(r *http.Request, l *share.Link, d *data) (int, err
 		return 0, nil
 	}
 
-	if r.URL.Query().Get("token") == l.Token {
+	if l.Token != "" && r.URL.Query().Get("token") == l.Token {
 		l.AuthSuccessCount++
 		if err := d.store.Share.Save(l); err != nil {
 			return http.StatusInternalServerError, err
@@ -145,7 +146,7 @@ func authenticateShareRequest(r *http.Request, l *share.Link, d *data) (int, err
 	password := r.Header.Get("X-SHARE-PASSWORD")
 	password, err := url.QueryUnescape(password)
 	if err != nil {
-		return 0, err
+		return http.StatusBadRequest, err
 	}
 	if password == "" {
 		l.AuthFailureCount++

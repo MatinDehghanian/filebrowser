@@ -39,7 +39,7 @@ func errToStatus(err error) int {
 		return http.StatusConflict
 	case errors.Is(err, libErrors.ErrPermissionDenied):
 		return http.StatusForbidden
-	case errors.Is(err, libErrors.ErrInvalidRequestParams):
+	case errors.Is(err, libErrors.ErrInvalidRequestParams), errors.Is(err, libErrors.ErrIsDirectory), errors.Is(err, os.ErrInvalid):
 		return http.StatusBadRequest
 	case errors.Is(err, libErrors.ErrRootUserDeletion):
 		return http.StatusForbidden

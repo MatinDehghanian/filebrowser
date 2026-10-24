@@ -26,9 +26,15 @@ func Search(ctx context.Context,
 	scope = filepath.ToSlash(filepath.Clean(scope))
 	scope = path.Join("/", scope)
 
-	return afero.Walk(fs, scope, func(fPath string, f os.FileInfo, _ error) error {
+	return afero.Walk(fs, scope, func(fPath string, f os.FileInfo, walkErr error) error {
 		if ctx.Err() != nil {
 			return context.Cause(ctx)
+		}
+		if walkErr != nil {
+			if fPath == scope {
+				return walkErr
+			}
+			return nil
 		}
 		fPath = filepath.ToSlash(filepath.Clean(fPath))
 		fPath = path.Join("/", fPath)
@@ -40,6 +46,9 @@ func Search(ctx context.Context,
 		}
 
 		if !checker.Check(fPath) {
+			if f.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 

@@ -1,6 +1,7 @@
 package fbhttp
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httputil"
@@ -31,12 +32,6 @@ func NewHandler(
 	server.Clean()
 
 	r := mux.NewRouter()
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Security-Policy", `default-src 'self'; style-src 'unsafe-inline';`)
-			next.ServeHTTP(w, r)
-		})
-	})
 	index, static := getStaticHandlers(store, server, assetsFs)
 
 	frontendProxyURL := strings.TrimSpace(os.Getenv("FILEBROWSER_FRONTEND_URL"))
@@ -59,6 +54,11 @@ func NewHandler(
 	}
 
 	r.HandleFunc("/health", healthHandler)
+	r.HandleFunc("/runtime-config.js", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = fmt.Fprintf(w, "window.__FILEBROWSER_CONFIG__ = {BaseURL: %q};", server.BaseURL)
+	})
 	if frontendProxy != nil {
 		r.NotFoundHandler = frontendProxy
 	} else {
@@ -114,7 +114,13 @@ func NewHandler(
 	public := api.PathPrefix("/public").Subrouter()
 	public.PathPrefix("/dl").Handler(monkey(publicDlHandler, "/api/public/dl/")).Methods("GET")
 	public.PathPrefix("/share").Handler(monkey(publicShareHandler, "/api/public/share/")).Methods("GET")
-	public.Handle("/settings", monkey(publicSettingsHandler, "/api/public/settings")).Methods("GET")
+	public.Handle("/settings", monkey(publicSettingsHandler, "")).Methods("GET")
+	// Older clients may have cached the former redirect to a trailing slash.
+	public.Handle("/settings/", monkey(publicSettingsHandler, "")).Methods("GET")
 
-	return stripPrefix(server.BaseURL, r), nil
+	r.PathPrefix("/api/").Handler(http.NotFoundHandler())
+	return stripPrefix(server.BaseURL, http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Security-Policy", `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; font-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; object-src 'none';`)
+		r.ServeHTTP(w, req)
+	})), nil
 }

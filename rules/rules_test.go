@@ -21,3 +21,14 @@ func TestMatchHidden(t *testing.T) {
 		}
 	}
 }
+
+func TestInvalidRegexDoesNotPanic(t *testing.T) {
+	rule := Rule{Regex: true, Regexp: &Regexp{Raw: "[invalid"}}
+	if rule.Matches("/file") {
+		t.Fatal("invalid expression must not match")
+	}
+	rule.Regexp = nil
+	if rule.Matches("/file") {
+		t.Fatal("missing expression must not match")
+	}
+}

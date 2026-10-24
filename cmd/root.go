@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"golang.org/x/crypto/bcrypt"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/MatinDehghanian/filebrowser/v2/auth"
@@ -86,7 +87,7 @@ func init() {
 	flags := rootCmd.Flags()
 	flags.Bool("noauth", false, "use the noauth auther when using quick setup")
 	flags.String("username", "admin", "username for the first user when using quick setup")
-	flags.String("password", "", "hashed password for the first user when using quick setup")
+	flags.String("password", "", "password or bcrypt hash for the first user when using quick setup")
 	flags.Uint32("socketPerm", 0666, "unix socket file permissions")
 	flags.String("cacheDir", "", "file cache directory (disabled if empty)")
 	flags.String("redisCacheUrl", "", "redis cache URL (for multi-instance deployments), e.g. redis://user:pass@host:port")
@@ -429,6 +430,35 @@ func quickSetup(v *viper.Viper, s *storage.Storage) error {
 	}
 
 	var err error
+	username := v.GetString("username")
+	password := v.GetString("password")
+
+	if password == "" {
+		var pwd string
+		pwd, err = users.RandomPwd(set.MinimumPasswordLength)
+		if err != nil {
+			return err
+		}
+
+		log.Printf("User '%s' initialized with randomly generated password: %s\n", username, pwd)
+		password, err = users.ValidateAndHashPwd(pwd, set.MinimumPasswordLength)
+		if err != nil {
+			return err
+		}
+	} else {
+		if _, hashErr := bcrypt.Cost([]byte(password)); hashErr != nil {
+			password, err = users.ValidateAndHashPwd(password, set.MinimumPasswordLength)
+			if err != nil {
+				return err
+			}
+		}
+		log.Printf("User '%s' initialized with user-provided password\n", username)
+	}
+
+	if username == "" || password == "" {
+		return fmt.Errorf("username and password cannot be empty during quick setup")
+	}
+
 	if v.GetBool("noauth") {
 		set.AuthMethod = auth.MethodNoAuth
 		err = s.Auth.Save(&auth.NoAuth{})
@@ -464,29 +494,6 @@ func quickSetup(v *viper.Viper, s *storage.Storage) error {
 	err = s.Settings.SaveServer(ser)
 	if err != nil {
 		return err
-	}
-
-	username := v.GetString("username")
-	password := v.GetString("password")
-
-	if password == "" {
-		var pwd string
-		pwd, err = users.RandomPwd(set.MinimumPasswordLength)
-		if err != nil {
-			return err
-		}
-
-		log.Printf("User '%s' initialized with randomly generated password: %s\n", username, pwd)
-		password, err = users.ValidateAndHashPwd(pwd, set.MinimumPasswordLength)
-		if err != nil {
-			return err
-		}
-	} else {
-		log.Printf("User '%s' initialize wth user-provided password\n", username)
-	}
-
-	if username == "" || password == "" {
-		log.Fatal("username and password cannot be empty during quick setup")
 	}
 
 	user := &users.User{
