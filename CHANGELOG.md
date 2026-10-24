@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.5.0](https://github.com/MatinDehghanian/filebrowser/compare/v0.4.2...v0.5.0) (2026-10-24)
+
+### Features
+
+* add language-aware editor formatting and rich previews ([06da631](https://github.com/MatinDehghanian/filebrowser/commit/06da6319b578eb83d2ac496fefe275850b4ea7f2))
+
+### Bug Fixes
+
+* harden file operations, uploads and access checks ([7e725d7](https://github.com/MatinDehghanian/filebrowser/commit/7e725d7d439d4b8e8e963564f4ba0d0afac64e7c))
+* **http:** handle command wait errors ([16eeddd](https://github.com/MatinDehghanian/filebrowser/commit/16eeddd1fa9496a55afa93e845e8201005b67316))
+* repair file manager actions and base URL routing ([50fe5b3](https://github.com/MatinDehghanian/filebrowser/commit/50fe5b379310e0f7611eb55dd61f22de4c9b89b1))
+
 ## [2.62.1](https://github.com/MatinDehghanian/filebrowser/compare/v2.62.0...v2.62.1) (2026-03-14)
 
 
