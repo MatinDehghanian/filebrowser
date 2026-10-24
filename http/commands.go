@@ -110,7 +110,9 @@ var commandsHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *d
 			log.Print(err)
 			_ = cmd.Process.Kill()
 			_ = output.Close()
-			<-finished
+			if waitErr := <-finished; waitErr != nil {
+				log.Printf("command exited after websocket write failure: %v", waitErr)
+			}
 			return 0, nil
 		}
 	}
@@ -118,7 +120,9 @@ var commandsHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *d
 	if err := s.Err(); err != nil {
 		_ = cmd.Process.Kill()
 		_ = output.Close()
-		<-finished
+		if waitErr := <-finished; waitErr != nil {
+			log.Printf("command exited after stdout scan failure: %v", waitErr)
+		}
 		wsErr(conn, r, http.StatusInternalServerError, err)
 		return 0, nil
 	}
