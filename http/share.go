@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,6 +20,29 @@ import (
 	"github.com/MatinDehghanian/filebrowser/v2/files"
 	"github.com/MatinDehghanian/filebrowser/v2/share"
 )
+
+type shareView struct {
+	Hash             string `json:"hash"`
+	Path             string `json:"path"`
+	UserID           uint   `json:"userID"`
+	Expire           int64  `json:"expire"`
+	HasPassword      bool   `json:"hasPassword"`
+	VisitCount       uint64 `json:"visitCount"`
+	DownloadCount    uint64 `json:"downloadCount"`
+	AuthSuccessCount uint64 `json:"authSuccessCount"`
+	AuthFailureCount uint64 `json:"authFailureCount"`
+}
+
+func shareResponse(l *share.Link) shareView {
+	return shareView{l.Hash, l.Path, l.UserID, l.Expire, l.PasswordHash != "", l.VisitCount, l.DownloadCount, l.AuthSuccessCount, l.AuthFailureCount}
+}
+func shareViews(links []*share.Link) []shareView {
+	out := make([]shareView, 0, len(links))
+	for _, link := range links {
+		out = append(out, shareResponse(link))
+	}
+	return out
+}
 
 func withPermShare(fn handleFunc) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
@@ -55,11 +79,29 @@ var shareListHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 		return s[i].Expire < s[j].Expire
 	})
 
-	return renderJSON(w, r, s)
+	return renderJSON(w, r, shareViews(s))
 })
 
 var shareGetsHandler = withPermShare(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	s, err := d.store.Share.Gets(r.URL.Path, d.user.ID)
+	if d.user.Perm.Admin {
+		all, e := d.store.Share.All()
+		err = e
+		s = []*share.Link{}
+		target := filepath.Clean(d.user.FullPath(r.URL.Path))
+		for _, link := range all {
+			owner, e := d.store.Users.Get(d.server.Root, link.UserID)
+			if e != nil {
+				if errors.Is(e, fberrors.ErrNotExist) {
+					continue
+				}
+				return errToStatus(e), e
+			}
+			if filepath.Clean(owner.FullPath(link.Path)) == target {
+				s = append(s, link)
+			}
+		}
+	}
 	if errors.Is(err, fberrors.ErrNotExist) {
 		return renderJSON(w, r, []*share.Link{})
 	}
@@ -68,7 +110,7 @@ var shareGetsHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 		return http.StatusInternalServerError, err
 	}
 
-	return renderJSON(w, r, s)
+	return renderJSON(w, r, shareViews(s))
 })
 
 var shareDeleteHandler = withPermShare(func(_ http.ResponseWriter, r *http.Request, d *data) (int, error) {
@@ -167,7 +209,7 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 		return http.StatusInternalServerError, err
 	}
 
-	return renderJSON(w, r, s)
+	return renderJSON(w, r, shareResponse(s))
 })
 
 func getSharePasswordHash(body share.CreateBody) (data []byte, statuscode int, err error) {

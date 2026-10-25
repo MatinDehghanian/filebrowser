@@ -16,6 +16,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, joinPaths } from "@/lib/utils";
 import { isWithinPath } from "@/lib/paths";
 import api from "@/lib/api";
+import { transferItems } from "@/lib/transfers";
+import { useAuth } from "@/contexts/auth-context";
+import { useConflictResolver } from "./conflict-dialog";
 import type { FileItem, FileListingResponse } from "@/types";
 
 interface MoveDialogProps {
@@ -35,6 +38,8 @@ export function MoveDialog({
   onComplete,
   action = "move",
 }: MoveDialogProps) {
+  const conflict = useConflictResolver();
+  const {user}=useAuth();
   const [selectedPath, setSelectedPath] = useState("/");
   const [isMoving, setIsMoving] = useState(false);
 
@@ -78,19 +83,11 @@ export function MoveDialog({
     setIsMoving(true);
 
     try {
-      const topLevel = items.filter((item) => !items.some((other) => other !== item && other.isDir && isWithinPath(other.path, item.path)));
-      const results = await Promise.allSettled(topLevel.map((item) =>
-        api.resourceAction(item.path, action, joinPaths(selectedPath, item.name), false,
-          action === "copy" && joinPaths(selectedPath, item.name) === item.path)
-      ));
-      const failures = results.filter((result) => result.status === "rejected");
-      const completed = results.length - failures.length;
-      if (completed) toast.success(`${completed} item(s) ${action === "copy" ? "copied" : "moved"} successfully`);
-      if (failures.length) toast.error(`${failures.length} failed: ${(failures[0] as PromiseRejectedResult).reason?.message || "Please retry"}`);
-      if (completed) {
-        onComplete();
-        onOpenChange(false);
-      }
+      conflict.reset();
+      const result = await transferItems(items, selectedPath, action, conflict.resolve, user?.perm.modify ?? false);
+      if (result.completed) { toast.success(`${result.completed} item(s) ${action === "copy" ? "copied" : "moved"}`); onComplete(); }
+      if (result.errors.length) toast.error(result.errors.join("; "));
+      if (!result.errors.length) onOpenChange(false);
     } finally {
       setIsMoving(false);
     }
@@ -103,8 +100,9 @@ export function MoveDialog({
   if (items.length === 0) return null;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={(next) => !isMoving && onOpenChange(next)}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>
             {action === "copy" ? "Copy" : "Move"} {items.length === 1 ? `"${items[0].name}"` : `${items.length} items`}
@@ -201,5 +199,7 @@ export function MoveDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    {conflict.dialog}
+    </>
   );
 }

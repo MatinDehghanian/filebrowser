@@ -36,7 +36,7 @@ type FileCache interface {
 
 func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, resizePreview bool) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if !d.user.Perm.Download && !d.user.Perm.Admin {
+		if !d.user.Perm.Download {
 			return http.StatusForbidden, nil
 		}
 		vars := mux.Vars(r)
@@ -48,7 +48,7 @@ func previewHandler(imgSvc ImgService, fileCache FileCache, enableThumbnails, re
 
 		file, err := files.NewFileInfo(&files.FileOptions{
 			Fs:         d.user.Fs,
-			Path:       "/" + vars["path"],
+			Path:       slashClean(vars["path"]),
 			Modify:     d.user.Perm.Modify,
 			Expand:     true,
 			ReadHeader: d.server.TypeDetectionByHeader,

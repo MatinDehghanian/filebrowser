@@ -27,12 +27,18 @@ func MatchHidden(path string) bool {
 }
 
 // Matches matches a path against a rule.
-func (r *Rule) Matches(path string) bool {
+func (r *Rule) Matches(path string, fold ...bool) bool {
 	if r.Regex {
 		return r.Regexp.MatchString(path)
 	}
 
-	return strings.HasPrefix(path, r.Path)
+	rulePath := r.Path
+	if len(fold) > 0 && fold[0] {
+		path = strings.ToLower(path)
+		rulePath = strings.ToLower(rulePath)
+	}
+	rulePath = strings.TrimRight(rulePath, "/")
+	return path == rulePath || strings.HasPrefix(path, rulePath+"/")
 }
 
 // Regexp is a wrapper to the native regexp type where we

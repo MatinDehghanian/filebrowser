@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { INTERNAL_DRAG_TYPE, transferRoots } from "@/lib/transfers";
 import { FileItem } from "./file-item";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { encodePath } from "@/lib/paths";
@@ -21,6 +22,8 @@ interface FileListProps {
   singleClick?: boolean;
   dateFormat?: boolean;
   locale?: string;
+  canDrag?: boolean;
+  onDropItems?: (event: React.DragEvent, destination: string) => void;
 }
 
 export function FileList({
@@ -36,6 +39,8 @@ export function FileList({
   singleClick = false,
   dateFormat = false,
   locale = "en",
+  canDrag = false,
+  onDropItems,
 }: FileListProps) {
   const navigate = useNavigate();
 
@@ -168,6 +173,12 @@ export function FileList({
               <FileItem
                 key={item.path}
                 item={item}
+                onDragItem={canDrag ? (item, event) => {
+                  const items = selectedItems.some((i) => i.path === item.path) ? selectedItems : [item];
+                  event.dataTransfer.setData(INTERNAL_DRAG_TYPE, JSON.stringify(transferRoots(items)));
+                  event.dataTransfer.effectAllowed = "copyMove";
+                } : undefined}
+                onDropItems={onDropItems}
                 viewMode={viewMode}
                 showParentPath={isSearching}
                 searchRootPath={searchRootPath}
@@ -196,6 +207,12 @@ export function FileList({
             <FileItem
               key={item.path}
               item={item}
+              onDragItem={canDrag ? (item, event) => {
+                const items = selectedItems.some((i) => i.path === item.path) ? selectedItems : [item];
+                event.dataTransfer.setData(INTERNAL_DRAG_TYPE, JSON.stringify(transferRoots(items)));
+                event.dataTransfer.effectAllowed = "copyMove";
+              } : undefined}
+              onDropItems={onDropItems}
               viewMode={viewMode}
               showParentPath={isSearching}
               searchRootPath={searchRootPath}

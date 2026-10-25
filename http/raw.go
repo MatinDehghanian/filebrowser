@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	gopath "path"
 	"path/filepath"
 	"strings"
@@ -21,7 +22,7 @@ func slashClean(name string) string {
 	if name == "" || name[0] != '/' {
 		name = "/" + name
 	}
-	return gopath.Clean(name)
+	return gopath.Clean(filepath.ToSlash(name))
 }
 
 func parseQueryFiles(r *http.Request, f *files.FileInfo, _ *users.User) ([]string, error) {
@@ -72,8 +73,9 @@ func parseQueryAlgorithm(r *http.Request) (string, archives.Archival, error) {
 
 func setContentDisposition(w http.ResponseWriter, r *http.Request, file *files.FileInfo) {
 	if r.URL.Query().Get("inline") == "true" {
-		w.Header().Set("Content-Disposition", "inline")
+		w.Header().Set("Content-Disposition", "inline; filename*=utf-8''"+url.PathEscape(file.Name))
 	} else {
+		w.Header().Set("Content-Type", "application/octet-stream")
 		// As per RFC6266 section 4.3
 		w.Header().Set("Content-Disposition", "attachment; filename*=utf-8''"+url.PathEscape(file.Name))
 	}
@@ -123,7 +125,10 @@ func getFiles(d *data, path, commonPath string) ([]archives.FileInfo, error) {
 	if path != commonPath {
 		nameInArchive := strings.TrimPrefix(path, commonPath)
 		nameInArchive = strings.TrimPrefix(nameInArchive, string(filepath.Separator))
-		nameInArchive = filepath.ToSlash(nameInArchive)
+		nameInArchive = strings.ReplaceAll(filepath.ToSlash(nameInArchive), "\\", "_")
+		if gopath.Clean("/"+nameInArchive) != "/"+nameInArchive {
+			return nil, os.ErrInvalid
+		}
 
 		archiveFiles = append(archiveFiles, archives.FileInfo{
 			FileInfo:      info,

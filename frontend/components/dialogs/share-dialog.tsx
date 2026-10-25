@@ -112,7 +112,7 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
   };
 
   const copyDirectDownloadLink = async (share: Share) => {
-    const isProtected = Boolean(share.token || share.password);
+    const isProtected = share.hasPassword;
     if (isProtected) {
       toast.error("Direct download is disabled for password-protected shares");
       return;
@@ -251,7 +251,7 @@ export function ShareDialog({ open, onOpenChange, item }: ShareDialogProps) {
                 
                 <div className="space-y-2">
                   {shares.map((share) => {
-                    const isProtected = Boolean(share.token || share.password);
+                    const isProtected = share.hasPassword;
 
                     return (
                       <div

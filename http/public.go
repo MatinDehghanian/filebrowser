@@ -1,6 +1,7 @@
 package fbhttp
 
 import (
+	"crypto/subtle"
 	"errors"
 	"net/http"
 	"net/url"
@@ -8,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/afero"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/MatinDehghanian/filebrowser/v2/files"
@@ -35,6 +35,9 @@ var withHashFile = func(fn handleFunc) handleFunc {
 		}
 
 		d.user = user
+		if !user.Perm.Share || !user.Perm.Download {
+			return http.StatusForbidden, nil
+		}
 
 		file, err := files.NewFileInfo(&files.FileOptions{
 			Fs:         d.user.Fs,
@@ -50,6 +53,11 @@ var withHashFile = func(fn handleFunc) handleFunc {
 			return errToStatus(err), err
 		}
 
+		if !file.IsDir {
+			d.raw = file
+			return fn(w, r, d)
+		}
+
 		// share base path
 		basePath := link.Path
 
@@ -62,7 +70,10 @@ var withHashFile = func(fn handleFunc) handleFunc {
 		}
 
 		// set fs root to the shared file/folder
-		d.user.Fs = afero.NewBasePathFs(d.user.Fs, basePath)
+		d.user.Fs, err = files.Subdirectory(d.user.Fs, basePath)
+		if err != nil {
+			return errToStatus(err), err
+		}
 		d.scopePrefix = basePath
 
 		file, err = files.NewFileInfo(&files.FileOptions{
@@ -99,7 +110,7 @@ func ifPathWithName(r *http.Request) (id, filePath string) {
 	case 1:
 		return r.URL.Path, "/"
 	default:
-		return pathElements[0], path.Join("/", path.Join(pathElements[1:]...))
+		return pathElements[0], slashClean(path.Join("/", path.Join(pathElements[1:]...)))
 	}
 }
 
@@ -135,7 +146,7 @@ func authenticateShareRequest(r *http.Request, l *share.Link, d *data) (int, err
 		return 0, nil
 	}
 
-	if l.Token != "" && r.URL.Query().Get("token") == l.Token {
+	if l.Token != "" && subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("token")), []byte(l.Token)) == 1 {
 		l.AuthSuccessCount++
 		if err := d.store.Share.Save(l); err != nil {
 			return http.StatusInternalServerError, err
@@ -206,6 +217,7 @@ type publicSettingsData struct {
 	HideLoginButton       bool                `json:"hideLoginButton"`
 	MinimumPasswordLength uint                `json:"minimumPasswordLength"`
 	AuthMethod            settings.AuthMethod `json:"authMethod"`
+	Tus                   settings.Tus        `json:"tus"`
 	Branding              settings.Branding   `json:"branding"`
 }
 
@@ -215,6 +227,7 @@ var publicSettingsHandler = func(w http.ResponseWriter, r *http.Request, d *data
 		HideLoginButton:       d.settings.HideLoginButton,
 		MinimumPasswordLength: d.settings.MinimumPasswordLength,
 		AuthMethod:            d.settings.AuthMethod,
+		Tus:                   d.settings.Tus,
 		Branding:              d.settings.Branding,
 	}
 

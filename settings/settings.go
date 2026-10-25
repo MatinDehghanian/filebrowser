@@ -47,6 +47,7 @@ func (s *Settings) GetRules() []rules.Rule {
 
 // Server specific settings.
 type Server struct {
+	CaseInsensitiveFs     bool   `json:"-"`
 	Root                  string `json:"root"`
 	BaseURL               string `json:"baseURL"`
 	Socket                string `json:"socket"`

@@ -30,7 +30,7 @@ export function FilePreview({
   subtitleURL,
 }: FilePreviewProps) {
   const kind = previewKind(item);
-  if (!canDownload && !isTextKind(kind))
+  if (!canDownload)
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
         <LockKeyhole className="h-10 w-10 text-muted-foreground" />

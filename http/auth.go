@@ -64,7 +64,7 @@ func (e extractor) ExtractToken(r *http.Request) (string, error) {
 	return "", request.ErrNoTokenInRequest
 }
 
-func renewableErr(err error, d *data) bool {
+func renewableErr(err error, d *data, r *http.Request, token *authToken) bool {
 	if d.settings.AuthMethod != fbAuth.MethodProxyAuth || err == nil {
 		return false
 	}
@@ -73,11 +73,24 @@ func renewableErr(err error, d *data) bool {
 		return false
 	}
 
-	if !errors.Is(err, jwt.ErrTokenExpired) {
+	if errors.Is(err, jwt.ErrTokenSignatureInvalid) || errors.Is(err, jwt.ErrTokenMalformed) || errors.Is(err, jwt.ErrTokenNotValidYet) || !errors.Is(err, jwt.ErrTokenExpired) {
 		return false
 	}
 
-	return true
+	auther, e := d.store.Auth.Get(fbAuth.MethodProxyAuth)
+	if e != nil {
+		return false
+	}
+	proxy, ok := auther.(*fbAuth.ProxyAuth)
+	if !ok || proxy.Header == "" {
+		return false
+	}
+	username := r.Header.Get(proxy.Header)
+	if username == "" {
+		return false
+	}
+	u, e := d.store.Users.Get(d.server.Root, username)
+	return e == nil && u.ID == token.User.ID
 }
 
 func withUser(fn handleFunc) handleFunc {
@@ -89,7 +102,7 @@ func withUser(fn handleFunc) handleFunc {
 		var tk authToken
 		p := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}), jwt.WithExpirationRequired())
 		token, err := request.ParseFromRequest(r, &extractor{}, keyFunc, request.WithClaims(&tk), request.WithParser(p))
-		if (err != nil || !token.Valid) && !renewableErr(err, d) {
+		if (err != nil || !token.Valid) && !renewableErr(err, d, r, &tk) {
 			return http.StatusUnauthorized, nil
 		}
 
@@ -103,6 +116,11 @@ func withUser(fn handleFunc) handleFunc {
 		d.user, err = d.store.Users.Get(d.server.Root, tk.User.ID)
 		if err != nil {
 			return http.StatusInternalServerError, err
+		}
+		trailing := strings.HasSuffix(r.URL.Path, "/") || strings.HasSuffix(r.URL.Path, string(os.PathSeparator))
+		r.URL.Path = slashClean(r.URL.Path)
+		if trailing && r.URL.Path != "/" {
+			r.URL.Path += "/"
 		}
 		return fn(w, r, d)
 	}
@@ -120,9 +138,12 @@ func withAdmin(fn handleFunc) handleFunc {
 
 func loginHandler(tokenExpireTime time.Duration) handleFunc {
 	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		}
 		auther, err := d.store.Auth.Get(d.settings.AuthMethod)
 		if err != nil {
-			return http.StatusInternalServerError, err
+			return errToStatus(err), err
 		}
 
 		user, err := auther.Auth(r, d.store.Users, d.settings, d.server)
@@ -130,7 +151,7 @@ func loginHandler(tokenExpireTime time.Duration) handleFunc {
 		case errors.Is(err, os.ErrPermission):
 			return http.StatusForbidden, nil
 		case err != nil:
-			return http.StatusInternalServerError, err
+			return errToStatus(err), err
 		}
 
 		return printToken(w, r, d, user, tokenExpireTime)
@@ -142,7 +163,7 @@ type signupBody struct {
 	Password string `json:"password"`
 }
 
-var signupHandler = func(_ http.ResponseWriter, r *http.Request, d *data) (int, error) {
+var signupHandler = func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	if !d.settings.Signup {
 		return http.StatusMethodNotAllowed, nil
 	}
@@ -151,9 +172,14 @@ var signupHandler = func(_ http.ResponseWriter, r *http.Request, d *data) (int, 
 		return http.StatusBadRequest, nil
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	info := &signupBody{}
 	err := json.NewDecoder(r.Body).Decode(info)
 	if err != nil {
+		var oversized *http.MaxBytesError
+		if errors.As(err, &oversized) {
+			return http.StatusRequestEntityTooLarge, err
+		}
 		return http.StatusBadRequest, err
 	}
 
@@ -170,6 +196,8 @@ var signupHandler = func(_ http.ResponseWriter, r *http.Request, d *data) (int, 
 	// Users signed up via the signup handler should never become admins, even
 	// if that is the default permission.
 	user.Perm.Admin = false
+	user.Perm.Execute = false
+	user.Commands = []string{}
 
 	pwd, err := users.ValidateAndHashPwd(info.Password, d.settings.MinimumPasswordLength)
 	if err != nil {
@@ -189,7 +217,7 @@ var signupHandler = func(_ http.ResponseWriter, r *http.Request, d *data) (int, 
 	user.Scope = userHome
 	log.Printf("new user: %s, home dir: [%s].", user.Username, userHome)
 
-	err = d.store.Users.Save(user)
+	err = d.store.Users.SaveProvisioned(user, d.settings.CreateUserDir)
 	if errors.Is(err, fberrors.ErrExist) {
 		return http.StatusConflict, err
 	} else if err != nil {

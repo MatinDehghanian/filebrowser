@@ -82,7 +82,7 @@ func TestPublicShareHandlerAuthentication(t *testing.T) {
 				if err := storage.Share.Save(tc.share); err != nil {
 					t.Fatalf("failed to save share: %v", err)
 				}
-				if err := storage.Users.Save(&users.User{Username: "username", Password: "pw"}); err != nil {
+				if err := storage.Users.Save(&users.User{Username: "username", Password: "pw", Perm: users.Permissions{Share: true, Download: true}}); err != nil {
 					t.Fatalf("failed to save user: %v", err)
 				}
 				if err := storage.Settings.Save(&settings.Settings{Key: []byte("key")}); err != nil {

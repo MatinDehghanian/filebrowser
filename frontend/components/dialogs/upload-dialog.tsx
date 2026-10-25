@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Upload, X, File, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -14,11 +14,15 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, formatBytes, joinPaths } from "@/lib/utils";
 import api from "@/lib/api";
+import { uploadResumable } from "@/lib/transfers";
+import { useConflictResolver } from "./conflict-dialog";
+import { useAuth } from "@/contexts/auth-context";
 
 interface UploadFile {
   file: File;
   progress: number;
-  status: "pending" | "uploading" | "completed" | "error";
+  status:
+    "pending" | "uploading" | "completed" | "error" | "skipped" | "paused";
   error?: string;
 }
 
@@ -27,6 +31,7 @@ interface UploadDialogProps {
   onOpenChange: (open: boolean) => void;
   path: string;
   onComplete: () => void;
+  initialFiles?: File[];
 }
 
 export function UploadDialog({
@@ -34,20 +39,53 @@ export function UploadDialog({
   onOpenChange,
   path,
   onComplete,
+  initialFiles,
 }: UploadDialogProps) {
+  const { user } = useAuth();
+  const [uploadSettings, setUploadSettings] = useState<{
+    chunkSize?: number;
+    retryCount?: number;
+  }>({});
+  useEffect(() => {
+    if (open) {
+      let cancelled = false;
+      void api
+        .getPublicSettings()
+        .then((settings) => {
+          if (!cancelled) setUploadSettings(settings.tus || {});
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [open]);
+  const conflict = useConflictResolver();
+  const controller = useRef<AbortController | null>(null);
+  useEffect(() => () => controller.current?.abort(), []);
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const addFiles = useCallback((newFiles: FileList | File[]) => {
-    const fileArray = Array.from(newFiles).map((file) => ({
-      file,
-      progress: 0,
-      status: "pending" as const,
-    }));
-    if (!isUploading) setFiles((prev) => [...prev, ...fileArray]);
-  }, [isUploading]);
+  const addFiles = useCallback(
+    (newFiles: FileList | File[]) => {
+      const fileArray = Array.from(newFiles).map((file) => ({
+        file,
+        progress: 0,
+        status: "pending" as const,
+      }));
+      if (!isUploading) setFiles((prev) => [...prev, ...fileArray]);
+    },
+    [isUploading],
+  );
+
+  useEffect(() => {
+    if (open && initialFiles?.length)
+      setFiles(
+        initialFiles.map((file) => ({ file, progress: 0, status: "pending" })),
+      );
+  }, [open, initialFiles]);
 
   const removeFile = useCallback((index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -72,7 +110,7 @@ export function UploadDialog({
         addFiles(e.dataTransfer.files);
       }
     },
-    [addFiles]
+    [addFiles],
   );
 
   const handleFileSelect = useCallback(
@@ -82,72 +120,65 @@ export function UploadDialog({
         e.target.value = "";
       }
     },
-    [addFiles]
+    [addFiles],
   );
 
   const uploadFile = async (uploadFile: UploadFile, index: number) => {
-    const filePath = joinPaths(path, uploadFile.file.name);
-    
+    const relative = uploadFile.file.webkitRelativePath || uploadFile.file.name;
+    const filePath = joinPaths(path, relative);
     setFiles((prev) =>
       prev.map((f, i) =>
-        i === index ? { ...f, status: "uploading" as const } : f
-      )
+        i === index ? { ...f, status: "uploading", error: undefined } : f,
+      ),
     );
-
     try {
-      // Create XMLHttpRequest for progress tracking
-      const xhr = new XMLHttpRequest();
-      const token = api.getToken();
-
-      await new Promise<void>((resolve, reject) => {
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const progress = Math.round((e.loaded / e.total) * 100);
-            setFiles((prev) =>
-              prev.map((f, i) => (i === index ? { ...f, progress } : f))
-            );
-          }
-        };
-
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error(xhr.status === 409 ? "A file with this name already exists" : xhr.responseText.trim() || xhr.statusText || "Upload failed"));
-          }
-        };
-
-        xhr.onerror = () => reject(new Error("Network error. Check your connection and retry."));
-        xhr.onabort = () => reject(new Error("Upload cancelled"));
-        xhr.ontimeout = () => reject(new Error("Upload timed out. Please retry."));
-        xhr.timeout = 30 * 60 * 1000;
-
-        xhr.open("POST", api.getUploadUrl(filePath));
-        if (token) {
-          xhr.setRequestHeader("X-Auth", token);
-        }
-        xhr.send(uploadFile.file);
+      const result = await uploadResumable(uploadFile.file, filePath, {
+        ownerId: user!.id,
+        signal: controller.current!.signal,
+        resolve: conflict.resolve,
+        canReplace: user?.perm.modify,
+        chunkSize: uploadSettings.chunkSize,
+        retries: uploadSettings.retryCount,
+        onProgress: (progress) =>
+          setFiles((prev) =>
+            prev.map((f, i) => (i === index ? { ...f, progress } : f)),
+          ),
       });
-
-      setFiles((prev) =>
-        prev.map((f, i) =>
-          i === index ? { ...f, status: "completed" as const, progress: 100 } : f
-        )
-      );
-      return true;
-    } catch (error) {
       setFiles((prev) =>
         prev.map((f, i) =>
           i === index
             ? {
                 ...f,
-                status: "error" as const,
-                error: error instanceof Error ? error.message : "Upload failed",
+                status: result,
+                progress: result === "completed" ? 100 : 0,
               }
-            : f
-        )
+            : f,
+        ),
       );
-      return false;
+      return result;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError")
+        controller.current?.abort();
+      setFiles((prev) =>
+        prev.map((f, i) =>
+          i === index
+            ? {
+                ...f,
+                status:
+                  error instanceof Error && error.name === "AbortError"
+                    ? "paused"
+                    : "error",
+                error:
+                  error instanceof Error && error.name === "AbortError"
+                    ? "Paused. Choose Upload to continue."
+                    : error instanceof Error
+                      ? error.message
+                      : "Upload failed",
+              }
+            : f,
+        ),
+      );
+      return controller.current?.signal.aborted ? "paused" : "error";
     }
   };
 
@@ -155,16 +186,25 @@ export function UploadDialog({
     if (files.length === 0) return;
 
     setIsUploading(true);
+    conflict.reset();
+    controller.current = new AbortController();
 
     const pendingFiles = files
       .map((f, i) => ({ file: f, index: i }))
-      .filter(({ file }) => file.status === "pending" || file.status === "error");
+      .filter(
+        ({ file }) =>
+          file.status === "pending" ||
+          file.status === "error" ||
+          file.status === "paused",
+      );
 
     let completedCount = 0;
     let errorCount = 0;
     for (const { file, index } of pendingFiles) {
-      if (await uploadFile(file, index)) completedCount++;
-      else errorCount++;
+      if (controller.current.signal.aborted) break;
+      const result = await uploadFile(file, index);
+      if (result === "completed") completedCount++;
+      else if (result === "error") errorCount++;
     }
     setIsUploading(false);
     if (completedCount > 0) {
@@ -173,7 +213,7 @@ export function UploadDialog({
     }
     if (errorCount > 0) {
       toast.error(`${errorCount} file(s) failed. You can retry them.`);
-    } else {
+    } else if (!controller.current.signal.aborted) {
       setFiles([]);
       onOpenChange(false);
     }
@@ -186,127 +226,161 @@ export function UploadDialog({
     }
   };
 
-  const pendingCount = files.filter((f) => (f.status === "pending" || f.status === "error")).length;
+  const pendingCount = files.filter(
+    (f) =>
+      f.status === "pending" || f.status === "error" || f.status === "paused",
+  ).length;
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Upload Files</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Upload Files</DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Drop Zone */}
-          <div
-            className={cn(
-              "flex flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed p-8 transition-colors",
-              isDragging
-                ? "border-primary bg-primary/5"
-                : "border-muted-foreground/25"
-            )}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-          >
-            <Upload className="h-10 w-10 text-muted-foreground" />
-            <div className="text-center">
-              <p className="text-sm font-medium">
-                Drag and drop files here, or{" "}
-                <button
-                  type="button"
-                  className="text-primary hover:underline"
-                  disabled={isUploading}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  browse
-                </button>
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Upload multiple files at once
-              </p>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              disabled={isUploading}
-              multiple
-              className="hidden"
-              onChange={handleFileSelect}
-            />
-          </div>
-
-          {/* File List */}
-          {files.length > 0 && (
-            <ScrollArea className="max-h-60">
-              <div className="space-y-2">
-                {files.map((uploadFile, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-3 rounded-lg border p-3"
+          <div className="space-y-4">
+            {/* Drop Zone */}
+            <div
+              className={cn(
+                "flex flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed p-8 transition-colors",
+                isDragging
+                  ? "border-primary bg-primary/5"
+                  : "border-muted-foreground/25",
+              )}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <Upload className="h-10 w-10 text-muted-foreground" />
+              <div className="text-center">
+                <p className="text-sm font-medium">
+                  Drag and drop files here, or{" "}
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
                   >
-                    <File className="h-8 w-8 shrink-0 text-muted-foreground" />
-                    <div className="flex-1 min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {uploadFile.file.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatBytes(uploadFile.file.size)}
-                      </p>
-                      {uploadFile.status === "uploading" && (
-                        <Progress
-                          value={uploadFile.progress}
-                          className="mt-2 h-1"
-                        />
-                      )}
-                      {uploadFile.status === "error" && (
-                        <p className="text-xs text-destructive mt-1">
-                          {uploadFile.error}
-                        </p>
-                      )}
-                    </div>
-                    <div className="shrink-0">
-                      {uploadFile.status === "completed" && (
-                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                      )}
-                      {uploadFile.status === "error" && (
-                        <AlertCircle className="h-5 w-5 text-destructive" />
-                      )}
-                      {uploadFile.status === "pending" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          disabled={isUploading}
-                          onClick={() => removeFile(index)}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                    browse
+                  </button>
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Upload files or folders. Interrupted uploads can resume for up
+                  to 24 hours.
+                </p>
               </div>
-            </ScrollArea>
-          )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                disabled={isUploading}
+                multiple
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+            </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={handleClose}
-              disabled={isUploading}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleUpload}
-              disabled={pendingCount === 0 || isUploading}
-            >
-              {isUploading ? "Uploading..." : `Upload ${pendingCount} file(s)`}
-            </Button>
+            <label className="block cursor-pointer text-sm text-primary">
+              Or select a folder
+              <input
+                type="file"
+                multiple
+                {...({ webkitdirectory: "" } as Record<string, string>)}
+                className="hidden"
+                disabled={isUploading}
+                onChange={handleFileSelect}
+              />
+            </label>
+            {/* File List */}
+            {files.length > 0 && (
+              <ScrollArea className="max-h-60">
+                <div className="space-y-2">
+                  {files.map((uploadFile, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-3 rounded-lg border p-3"
+                    >
+                      <File className="h-8 w-8 shrink-0 text-muted-foreground" />
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {uploadFile.file.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatBytes(uploadFile.file.size)}
+                        </p>
+                        {uploadFile.status === "skipped" && (
+                          <p className="text-xs text-muted-foreground">
+                            Skipped
+                          </p>
+                        )}
+                        {uploadFile.status === "uploading" && (
+                          <Progress
+                            value={uploadFile.progress}
+                            className="mt-2 h-1"
+                          />
+                        )}
+                        {(uploadFile.status === "error" ||
+                          uploadFile.status === "paused") && (
+                          <p className="text-xs text-destructive mt-1">
+                            {uploadFile.error}
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0">
+                        {uploadFile.status === "completed" && (
+                          <CheckCircle2 className="h-5 w-5 text-green-500" />
+                        )}
+                        {uploadFile.status === "error" && (
+                          <AlertCircle className="h-5 w-5 text-destructive" />
+                        )}
+                        {uploadFile.status === "pending" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={isUploading}
+                            onClick={() => removeFile(index)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2">
+              {isUploading && (
+                <Button
+                  variant="outline"
+                  onClick={() => controller.current?.abort()}
+                >
+                  Pause
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={handleClose}
+                disabled={isUploading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleUpload}
+                disabled={pendingCount === 0 || isUploading}
+              >
+                {isUploading
+                  ? "Uploading..."
+                  : `Upload ${pendingCount} file(s)`}
+              </Button>
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      {conflict.dialog}
+    </>
   );
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/MatinDehghanian/filebrowser/v2/files"
 	"github.com/MatinDehghanian/filebrowser/v2/settings"
 	"github.com/MatinDehghanian/filebrowser/v2/storage"
 )
@@ -30,6 +31,7 @@ func NewHandler(
 	assetsFs fs.FS,
 ) (http.Handler, error) {
 	server.Clean()
+	server.CaseInsensitiveFs = files.CaseInsensitive(server.Root)
 
 	r := mux.NewRouter()
 	index, static := getStaticHandlers(store, server, assetsFs)
@@ -83,6 +85,7 @@ func NewHandler(
 	users.Handle("/{id:[0-9]+}", monkey(userGetHandler, "")).Methods("GET")
 	users.Handle("/{id:[0-9]+}", monkey(userDeleteHandler, "")).Methods("DELETE")
 
+	api.PathPrefix("/resources/recursive").Handler(monkey(resourceRecursiveHandler, "/api/resources/recursive")).Methods("GET")
 	api.PathPrefix("/resources").Handler(monkey(resourceGetHandler, "/api/resources")).Methods("GET")
 	api.PathPrefix("/resources").Handler(monkey(resourceDeleteHandler(fileCache), "/api/resources")).Methods("DELETE")
 	api.PathPrefix("/resources").Handler(monkey(resourcePostHandler(fileCache), "/api/resources")).Methods("POST")
@@ -96,7 +99,8 @@ func NewHandler(
 
 	api.PathPrefix("/usage").Handler(monkey(diskUsage, "/api/usage")).Methods("GET")
 
-	api.PathPrefix("/shares").Handler(monkey(shareListHandler, "/api/shares")).Methods("GET")
+	api.Handle("/shares/", monkey(shareListHandler, "")).Methods("GET")
+	api.Handle("/shares", monkey(shareListHandler, "")).Methods("GET")
 	api.PathPrefix("/share").Handler(monkey(shareGetsHandler, "/api/share")).Methods("GET")
 	api.PathPrefix("/share").Handler(monkey(sharePostHandler, "/api/share")).Methods("POST")
 	api.PathPrefix("/share").Handler(monkey(shareDeleteHandler, "/api/share")).Methods("DELETE")

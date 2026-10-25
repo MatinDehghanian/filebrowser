@@ -137,7 +137,7 @@ func stat(opts *FileOptions) (*FileInfo, error) {
 	info, err := opts.Fs.Stat(opts.Path)
 	if err != nil {
 		// can't follow symlink
-		if file != nil && file.IsSymlink {
+		if file != nil && file.IsSymlink && !IsScopeError(err) {
 			return file, nil
 		}
 		return nil, err
@@ -394,6 +394,21 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool, calcImgRe
 	afs := &afero.Afero{Fs: i.Fs}
 	dir, err := afs.ReadDir(i.Path)
 	if err != nil {
+		if folder, e := i.Fs.Open(i.Path); e == nil {
+			names, e := folder.Readdirnames(-1)
+			folder.Close()
+			if e == nil {
+				dir = nil
+				err = nil
+				for _, name := range names {
+					if entry, e := i.Fs.Stat(path.Join(i.Path, name)); e == nil {
+						dir = append(dir, entry)
+					}
+				}
+			}
+		}
+	}
+	if err != nil {
 		return err
 	}
 
@@ -417,9 +432,12 @@ func (i *FileInfo) readListing(checker rules.Checker, readHeader bool, calcImgRe
 			// It's a symbolic link. We try to follow it. If it doesn't work,
 			// we stay with the link information instead of the target's.
 			info, err := i.Fs.Stat(fPath)
-			if err == nil {
+			switch {
+			case err == nil:
 				f = info
-			} else {
+			case IsScopeError(err):
+				continue
+			default:
 				isInvalidLink = true
 			}
 		}

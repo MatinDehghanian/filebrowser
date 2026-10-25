@@ -109,7 +109,7 @@ export function Sidebar() {
     <TooltipProvider delayDuration={0}>
       <aside
         className={cn(
-          "flex h-screen flex-col border-r bg-sidebar transition-all duration-300",
+          "flex h-screen min-h-0 flex-col border-r bg-sidebar transition-all duration-300",
           collapsed ? "w-16 shrink-0" : "w-48 shrink-0 lg:w-64"
         )}
       >
@@ -137,7 +137,7 @@ export function Sidebar() {
         </div>
 
         {/* Main Navigation */}
-        <nav className="flex-1 space-y-1 p-2">
+        <nav className="min-h-0 flex-1 overflow-y-auto space-y-1 p-2">
           {mainNavItems.map((item) => (
             <NavLink key={item.href} item={item} />
           ))}

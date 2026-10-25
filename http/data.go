@@ -29,31 +29,31 @@ type data struct {
 }
 
 // Check implements rules.Checker.
-func (d *data) Check(path string) bool {
-	if strings.HasPrefix(pathpkg.Base(path), ".filebrowser-tus-") {
-		return false
-	}
+func (d *data) rulePath(path string) string {
+	path = slashClean(path)
 	if d.scopePrefix != "" {
 		path = pathpkg.Join(d.scopePrefix, path)
 	}
-	if d.user.HideDotfiles && rules.MatchHidden(path) {
+	return path
+}
+func (d *data) CheckRules(path string) bool {
+	path = d.rulePath(path)
+	allow := true
+	for _, rule := range append(append([]rules.Rule{}, d.settings.Rules...), d.user.Rules...) {
+		if rule.Matches(path, d.server.CaseInsensitiveFs) {
+			allow = rule.Allow
+		}
+	}
+	return allow
+}
+func (d *data) Check(path string) bool {
+	if strings.HasPrefix(pathpkg.Base(path), ".filebrowser-tus-") || strings.HasPrefix(pathpkg.Base(path), ".filebrowser-upload-") || strings.HasPrefix(pathpkg.Base(path), ".filebrowser-copy-") {
 		return false
 	}
-
-	allow := true
-	for _, rule := range d.settings.Rules {
-		if rule.Matches(path) {
-			allow = rule.Allow
-		}
+	if d.user.HideDotfiles && rules.MatchHidden(d.rulePath(path)) {
+		return false
 	}
-
-	for _, rule := range d.user.Rules {
-		if rule.Matches(path) {
-			allow = rule.Allow
-		}
-	}
-
-	return allow
+	return d.CheckRules(path)
 }
 
 func handle(fn handleFunc, prefix string, store *storage.Storage, server *settings.Server) http.Handler {

@@ -37,6 +37,10 @@ type HookAuth struct {
 
 // Auth authenticates the user via a json in content body.
 func (a *HookAuth) Auth(r *http.Request, usr users.Store, stg *settings.Settings, srv *settings.Server) (*users.User, error) {
+	local := &HookAuth{Command: a.Command}
+	return local.authenticate(r, usr, stg, srv)
+}
+func (a *HookAuth) authenticate(r *http.Request, usr users.Store, stg *settings.Settings, srv *settings.Server) (*users.User, error) {
 	var cred hookCred
 
 	if r.Body == nil {
@@ -45,6 +49,10 @@ func (a *HookAuth) Auth(r *http.Request, usr users.Store, stg *settings.Settings
 
 	err := json.NewDecoder(r.Body).Decode(&cred)
 	if err != nil {
+		var oversized *http.MaxBytesError
+		if errors.As(err, &oversized) {
+			return nil, err
+		}
 		return nil, os.ErrPermission
 	}
 
@@ -86,22 +94,6 @@ func (a *HookAuth) LoginPage() bool {
 // RunCommand starts the hook command and returns the action
 func (a *HookAuth) RunCommand() (string, error) {
 	command := strings.Split(a.Command, " ")
-	envMapping := func(key string) string {
-		switch key {
-		case "USERNAME":
-			return a.Cred.Username
-		case "PASSWORD":
-			return a.Cred.Password
-		default:
-			return os.Getenv(key)
-		}
-	}
-	for i, arg := range command {
-		if i == 0 {
-			continue
-		}
-		command[i] = os.Expand(arg, envMapping)
-	}
 
 	cmd := exec.Command(command[0], command[1:]...)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("USERNAME=%s", a.Cred.Username))
@@ -173,6 +165,10 @@ func (a *HookAuth) SaveUser() (*users.User, error) {
 		}
 		u = a.GetUser(d)
 
+		_, explicitScope := a.Fields.Values["user.scope"]
+		if a.Settings.CreateUserDir && !explicitScope {
+			u.Scope = ""
+		}
 		userHome, err := a.Settings.MakeUserDir(u.Username, u.Scope, a.Server.Root)
 		if err != nil {
 			return nil, fmt.Errorf("user: failed to mkdir user home dir: [%s]", userHome)
@@ -180,7 +176,7 @@ func (a *HookAuth) SaveUser() (*users.User, error) {
 		u.Scope = userHome
 		log.Printf("user: %s, home dir: [%s].", u.Username, userHome)
 
-		err = a.Users.Save(u)
+		err = a.Users.SaveProvisioned(u, a.Settings.CreateUserDir && !explicitScope)
 		if err != nil {
 			return nil, err
 		}

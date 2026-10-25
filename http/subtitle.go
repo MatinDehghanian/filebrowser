@@ -2,7 +2,9 @@ package fbhttp
 
 import (
 	"bytes"
+	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/asticode/go-astisub"
@@ -49,7 +51,11 @@ func subtitleFileHandler(w http.ResponseWriter, r *http.Request, file *files.Fil
 	// load subtitle for conversion to vtt
 	var sub *astisub.Subtitles
 	if strings.HasSuffix(file.Name, ".srt") {
-		sub, err = astisub.ReadFromSRT(fd)
+		content, e := io.ReadAll(fd)
+		if e != nil {
+			return http.StatusInternalServerError, e
+		}
+		sub, err = astisub.ReadFromSRT(bytes.NewReader(regexp.MustCompile(`(?i)<br(?:\s+[^>]*)?\s*/?>`).ReplaceAll(content, []byte("\n"))))
 	} else if strings.HasSuffix(file.Name, ".ass") || strings.HasSuffix(file.Name, ".ssa") {
 		sub, err = astisub.ReadFromSSA(fd)
 	}

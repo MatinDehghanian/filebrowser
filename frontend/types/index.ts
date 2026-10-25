@@ -87,6 +87,7 @@ export interface Share {
   authSuccessCount: number;
   authFailureCount: number;
   unit: "hours" | "days" | "seconds";
+  hasPassword: boolean;
   token?: string;
   password?: string;
 }
@@ -127,6 +128,7 @@ export interface Settings {
 }
 
 export interface PublicSettings {
+  tus?: TusSettings;
   signup: boolean;
   hideLoginButton: boolean;
   minimumPasswordLength: number;

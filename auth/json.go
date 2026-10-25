@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -39,6 +40,10 @@ func (a JSONAuth) Auth(r *http.Request, usr users.Store, _ *settings.Settings, s
 
 	err := json.NewDecoder(r.Body).Decode(&cred)
 	if err != nil {
+		var oversized *http.MaxBytesError
+		if errors.As(err, &oversized) {
+			return nil, err
+		}
 		return nil, os.ErrPermission
 	}
 

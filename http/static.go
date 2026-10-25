@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"io/fs"
 	"log"
@@ -13,7 +14,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"text/template"
 
 	"github.com/MatinDehghanian/filebrowser/v2/auth"
 	"github.com/MatinDehghanian/filebrowser/v2/settings"
@@ -85,7 +85,7 @@ func handleWithStaticData(w http.ResponseWriter, _ *http.Request, d *data, fSys 
 		return http.StatusInternalServerError, err
 	}
 
-	data["Json"] = strings.ReplaceAll(string(b), `'`, `\'`)
+	data["Json"] = template.JS(b)
 
 	fileContents, err := fs.ReadFile(fSys, file)
 	if err != nil {

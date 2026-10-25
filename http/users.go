@@ -156,6 +156,9 @@ var userPostHandler = withAdmin(func(w http.ResponseWriter, r *http.Request, d *
 		return http.StatusBadRequest, err
 	}
 
+	if req.Data.Perm.Share && !req.Data.Perm.Download {
+		return http.StatusBadRequest, fberrors.ErrInvalidRequestParams
+	}
 	userHome, err := d.settings.MakeUserDir(req.Data.Username, req.Data.Scope, d.server.Root)
 	if err != nil {
 		log.Printf("create user: failed to mkdir user home dir: [%s]", userHome)
@@ -204,6 +207,13 @@ var userPutHandler = withSelfOrAdmin(func(w http.ResponseWriter, r *http.Request
 		return http.StatusBadRequest, nil
 	}
 
+	for _, field := range req.Which {
+		if strings.EqualFold(field, "perm") || strings.EqualFold(field, "all") {
+			if req.Data.Perm.Share && !req.Data.Perm.Download {
+				return http.StatusBadRequest, fberrors.ErrInvalidRequestParams
+			}
+		}
+	}
 	if len(req.Which) == 0 || (len(req.Which) == 1 && req.Which[0] == "all") {
 		if !d.user.Perm.Admin {
 			return http.StatusForbidden, nil

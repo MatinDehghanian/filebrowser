@@ -2,13 +2,19 @@ package fbhttp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
 
 	"github.com/redis/go-redis/v9"
 )
+
+type redisUploadInfo struct {
+	Length      int64
+	Fingerprint string
+	Overwrite   bool
+}
 
 // redisUploadCache is an upload cache for multi replica deployments
 type redisUploadCache struct {
@@ -39,8 +45,9 @@ func (c *redisUploadCache) filePathKey(filePath string) string {
 	return "filebrowser:upload:" + filePath
 }
 
-func (c *redisUploadCache) Register(filePath string, fileSize int64) {
-	err := c.client.Set(context.Background(), c.filePathKey(filePath), fileSize, uploadCacheTTL).Err()
+func (c *redisUploadCache) Register(filePath string, fileSize int64, _ func() error, fingerprint string, overwrite bool) {
+	payload, _ := json.Marshal(redisUploadInfo{fileSize, fingerprint, overwrite})
+	err := c.client.Set(context.Background(), c.filePathKey(filePath), payload, uploadCacheTTL).Err()
 	if err != nil {
 		log.Printf("failed to register upload in redis cache: %v", err)
 	}
@@ -57,17 +64,29 @@ func (c *redisUploadCache) GetLength(filePath string) (int64, error) {
 	result, err := c.client.Get(context.Background(), c.filePathKey(filePath)).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return 0, fmt.Errorf("no active upload found for the given path")
+			return 0, errUploadMissing
 		}
 		return 0, fmt.Errorf("redis error: %w", err)
 	}
 
-	size, err := strconv.ParseInt(result, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid upload length in cache: %w", err)
+	var info redisUploadInfo
+	if err := json.Unmarshal([]byte(result), &info); err != nil {
+		return 0, err
 	}
+	size := info.Length
 
+	c.Touch(filePath)
 	return size, nil
+}
+
+func (c *redisUploadCache) Metadata(path string) (string, bool, error) {
+	v, err := c.client.Get(context.Background(), c.filePathKey(path)).Result()
+	if err != nil {
+		return "", false, err
+	}
+	var info redisUploadInfo
+	err = json.Unmarshal([]byte(v), &info)
+	return info.Fingerprint, info.Overwrite, err
 }
 
 func (c *redisUploadCache) Touch(filePath string) {

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { formatBytes, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { getParentPath } from "@/lib/utils";
+import { INTERNAL_DRAG_TYPE } from "@/lib/transfers";
 import { FileIcon } from "./file-icon";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { FileItem as FileItemType, ViewMode } from "@/types";
@@ -21,6 +22,8 @@ interface FileItemProps {
   singleClick?: boolean;
   dateFormat?: boolean;
   locale?: string;
+  onDragItem?: (item: FileItemType, event: React.DragEvent) => void;
+  onDropItems?: (event: React.DragEvent, destination: string) => void;
 }
 
 export function FileItem({
@@ -36,6 +39,8 @@ export function FileItem({
   singleClick = false,
   dateFormat = false,
   locale = "en",
+  onDragItem,
+  onDropItems,
 }: FileItemProps) {
   const getDisplayParentPath = () => {
     const parentPath = getParentPath(item.path);
@@ -67,6 +72,16 @@ export function FileItem({
   }, []);
 
   const parentPath = getDisplayParentPath();
+  const dragProps = {
+    draggable: !!onDragItem,
+    onDragStart: (event: React.DragEvent) => onDragItem?.(item, event),
+    onDragOver: (event: React.DragEvent) => {
+      if (item.isDir && onDropItems && event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE)) {
+        event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = event.ctrlKey || event.metaKey ? "copy" : "move";
+      }
+    },
+    onDrop: (event: React.DragEvent) => { if (item.isDir && event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE)) onDropItems?.(event, item.path); },
+  };
 
   const handleClick = (e: React.MouseEvent) => {
     if ((isTouchDevice || singleClick) && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
@@ -95,7 +110,8 @@ export function FileItem({
           "group flex items-center gap-3 rounded-lg border border-transparent px-3 py-2 transition-colors hover:bg-accent cursor-pointer",
           selected && "border-primary/50 bg-primary/5"
         )}
-        onClick={handleClick}
+        {...dragProps}
+      onClick={handleClick}
         onContextMenu={(e) => onContextMenu(item, e)}
         onKeyDown={handleKeyDown}
         tabIndex={0}
@@ -138,6 +154,7 @@ export function FileItem({
         "group relative flex flex-col items-center gap-2 rounded-lg border border-transparent p-4 transition-colors hover:bg-accent cursor-pointer",
         selected && "border-primary/50 bg-primary/5"
       )}
+      {...dragProps}
       onClick={handleClick}
       onContextMenu={(e) => onContextMenu(item, e)}
       onKeyDown={handleKeyDown}

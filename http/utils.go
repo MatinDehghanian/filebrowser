@@ -21,13 +21,17 @@ func renderJSON(w http.ResponseWriter, _ *http.Request, data interface{}) (int, 
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if _, err := w.Write(marsh); err != nil {
-		return http.StatusInternalServerError, err
+		return 0, err
 	}
 
 	return 0, nil
 }
 
 func errToStatus(err error) int {
+	var oversized *http.MaxBytesError
+	if errors.As(err, &oversized) {
+		return http.StatusRequestEntityTooLarge
+	}
 	switch {
 	case err == nil:
 		return http.StatusOK

@@ -191,7 +191,12 @@ func TestSharesAndExpiredLinks(t *testing.T) {
 	require.Equal(t, 200, created.Code)
 	var link share.Link
 	require.NoError(t, json.Unmarshal(created.Body.Bytes(), &link))
-	require.NotEmpty(t, link.Token)
+	require.Empty(t, link.Token)
+	require.NotContains(t, created.Body.String(), "password_hash")
+	require.NotContains(t, created.Body.String(), `"token"`)
+	stored, err := f.store.Share.GetByHash(link.Hash)
+	require.NoError(t, err)
+	link.Token = stored.Token
 	require.Equal(t, 401, f.request(t, "GET", "/api/public/share/"+link.Hash, "").Code)
 	require.Equal(t, 200, f.request(t, "GET", "/api/public/share/"+link.Hash+"?token="+url.QueryEscape(link.Token), "").Code)
 	downloaded := f.request(t, "GET", "/api/public/dl/"+link.Hash+"?token="+url.QueryEscape(link.Token), "")

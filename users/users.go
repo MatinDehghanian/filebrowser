@@ -93,7 +93,7 @@ func (u *User) Clean(baseScope string, fields ...string) error {
 	if u.Fs == nil {
 		scope := u.Scope
 		scope = filepath.Join(baseScope, filepath.Join("/", scope))
-		u.Fs = afero.NewBasePathFs(afero.NewOsFs(), scope)
+		u.Fs = files.NewScopedFs(scope)
 	}
 
 	return nil
@@ -101,5 +101,9 @@ func (u *User) Clean(baseScope string, fields ...string) error {
 
 // FullPath gets the full path for a user's relative path.
 func (u *User) FullPath(path string) string {
-	return afero.FullBaseFsPath(u.Fs.(*afero.BasePathFs), path)
+	if fs, ok := u.Fs.(interface{ RealPath(string) (string, error) }); ok {
+		p, _ := fs.RealPath(path)
+		return p
+	}
+	return path
 }

@@ -79,7 +79,7 @@ export default function SharesSettingsPage() {
   };
 
   const copyDirectDownloadLink = (share: Share) => {
-    const isProtected = Boolean(share.token || share.password);
+    const isProtected = share.hasPassword;
     if (isProtected) {
       toast.error("Direct download is disabled for password-protected shares");
       return;
@@ -180,7 +180,7 @@ export default function SharesSettingsPage() {
                 {shares.map((share) => {
                   const expiryStatus = getExpiryStatus(share);
                   const isDir = share.path.endsWith("/");
-                  const isProtected = Boolean(share.token || share.password);
+                  const isProtected = share.hasPassword;
                   
                   return (
                     <TableRow key={share.hash}>

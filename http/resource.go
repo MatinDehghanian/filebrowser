@@ -29,7 +29,7 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		Expand:     true,
 		ReadHeader: d.server.TypeDetectionByHeader,
 		Checker:    d,
-		Content:    true,
+		Content:    d.user.Perm.Download && r.URL.Query().Get("metadata") != "true",
 	})
 	if err != nil {
 		return errToStatus(err), err
@@ -41,6 +41,9 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 		file.ApplySort()
 		return renderJSON(w, r, file)
 	} else if encoding == "true" {
+		if !d.user.Perm.Download {
+			return http.StatusForbidden, nil
+		}
 		if file.Type != "text" {
 			return renderJSON(w, r, file)
 		}
@@ -63,6 +66,9 @@ var resourceGetHandler = withUser(func(w http.ResponseWriter, r *http.Request, d
 	}
 
 	if checksum := r.URL.Query().Get("checksum"); checksum != "" {
+		if !d.user.Perm.Download {
+			return http.StatusForbidden, nil
+		}
 		err := file.Checksum(checksum)
 		if errors.Is(err, fberrors.ErrInvalidOption) {
 			return http.StatusBadRequest, nil
@@ -95,6 +101,9 @@ func resourceDeleteHandler(fileCache FileCache) handleFunc {
 			return errToStatus(err), err
 		}
 
+		if err := checkTreeAccess(r.Context(), d, r.URL.Path, ""); err != nil {
+			return errToStatus(err), err
+		}
 		// delete thumbnails
 		err = delThumbs(r.Context(), fileCache, file)
 		if err != nil {
@@ -129,7 +138,7 @@ func resourcePostHandler(fileCache FileCache) handleFunc {
 			} else if !os.IsNotExist(err) {
 				return errToStatus(err), err
 			}
-			err := d.user.Fs.MkdirAll(r.URL.Path, d.settings.DirMode)
+			err := d.RunHook(func() error { return d.user.Fs.MkdirAll(r.URL.Path, d.settings.DirMode) }, "upload", r.URL.Path, "", d.user)
 			return errToStatus(err), err
 		}
 
@@ -217,8 +226,8 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 		if dst == "" || (action != "copy" && action != "rename" && action != "move") {
 			return http.StatusBadRequest, fberrors.ErrInvalidRequestParams
 		}
-		dst = path.Clean("/" + dst)
-		src = path.Clean("/" + src)
+		dst = slashClean(dst)
+		src = slashClean(src)
 		if !d.Check(src) || !d.Check(dst) {
 			return http.StatusForbidden, nil
 		}
@@ -266,6 +275,9 @@ func resourcePatchHandler(fileCache FileCache) handleFunc {
 			}
 		}
 
+		if err := checkTreeAccess(r.Context(), d, src, dst); err != nil {
+			return errToStatus(err), err
+		}
 		err = d.RunHook(func() error {
 			return patchAction(r.Context(), action, src, dst, d, fileCache)
 		}, action, src, dst, d.user)
@@ -451,4 +463,62 @@ var diskUsage = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (
 		Total: usage.Total,
 		Used:  usage.Used,
 	})
+})
+
+// Check both ends of every descendant before a recursive mutation begins.
+func checkTreeAccess(ctx context.Context, d *data, src, dst string) error {
+	if len(d.settings.Rules)+len(d.user.Rules) == 0 {
+		return nil
+	}
+	return afero.Walk(d.user.Fs, src, func(name string, _ os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		if !d.CheckRules(name) {
+			return fberrors.ErrPermissionDenied
+		}
+		if dst != "" {
+			rel, e := filepath.Rel(src, name)
+			if e != nil {
+				return e
+			}
+			if !d.CheckRules(filepath.Join(dst, rel)) {
+				return fberrors.ErrPermissionDenied
+			}
+		}
+		return nil
+	})
+}
+
+var resourceRecursiveHandler = withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	root := slashClean(r.URL.Path)
+	if !d.Check(root) {
+		return http.StatusForbidden, nil
+	}
+	entries := []map[string]interface{}{}
+	err := afero.Walk(d.user.Fs, root, func(name string, info os.FileInfo, err error) error {
+		if e := r.Context().Err(); e != nil {
+			return e
+		}
+		if err != nil {
+			return err
+		}
+		if !d.Check(name) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if name != root {
+			entries = append(entries, map[string]interface{}{"path": filepath.ToSlash(name), "name": info.Name(), "size": info.Size(), "modified": info.ModTime(), "isDir": info.IsDir()})
+		}
+		return nil
+	})
+	if err != nil {
+		return errToStatus(err), err
+	}
+	return renderJSON(w, r, entries)
 })

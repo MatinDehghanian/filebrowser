@@ -1,6 +1,9 @@
 package users
 
 import (
+	"errors"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,15 +26,17 @@ type Store interface {
 	Gets(baseScope string) ([]*User, error)
 	Update(user *User, fields ...string) error
 	Save(user *User) error
+	SaveProvisioned(user *User, isolated bool) error
 	Delete(id interface{}) error
 	LastUpdate(id uint) int64
 }
 
 // Storage is a users storage.
 type Storage struct {
-	back    StorageBackend
-	updated map[uint]int64
-	mux     sync.RWMutex
+	back         StorageBackend
+	updated      map[uint]int64
+	mux          sync.RWMutex
+	provisioning sync.Mutex
 }
 
 // NewStorage creates a users storage from a backend.
@@ -113,6 +118,25 @@ func (s *Storage) Save(user *User) error {
 	}
 
 	return s.back.Save(user)
+}
+
+// SaveProvisioned serializes the home collision check with account creation.
+// Explicit shared scopes remain available to administrators.
+func (s *Storage) SaveProvisioned(user *User, isolated bool) error {
+	s.provisioning.Lock()
+	defer s.provisioning.Unlock()
+	if isolated {
+		existing, err := s.back.Gets()
+		if err != nil && !errors.Is(err, fberrors.ErrNotExist) {
+			return err
+		}
+		for _, other := range existing {
+			if strings.EqualFold(filepath.Clean(other.Scope), filepath.Clean(user.Scope)) {
+				return fberrors.ErrExist
+			}
+		}
+	}
+	return s.Save(user)
 }
 
 // Delete allows you to delete a user by its name or username. The provided

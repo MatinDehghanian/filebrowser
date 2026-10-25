@@ -5,6 +5,8 @@ import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import useSWR from "swr";
 import { toast } from "sonner";
 import api from "@/lib/api";
+import { INTERNAL_DRAG_TYPE, transferItems } from "@/lib/transfers";
+import { useConflictResolver } from "@/components/dialogs/conflict-dialog";
 import { useAuth } from "@/contexts/auth-context";
 import { Header } from "@/components/layout/header";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
@@ -41,6 +43,9 @@ export default function FilesClient({}: FilesClientProps) {
   const [searchParams] = useSearchParams();
   const { user, updateUser } = useAuth();
 
+  const conflict = useConflictResolver();
+  const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
+  const [transferring, setTransferring] = useState(false);
   // State
   const [viewMode, setViewMode] = useState<ViewMode>(user?.viewMode || "list");
   const [sorting, setSorting] = useState<Sorting>(
@@ -214,41 +219,26 @@ export default function FilesClient({}: FilesClientProps) {
     window.open(url.toString(), "_blank");
   };
 
-  const handleDropUpload = useCallback(
-    async (filesToUpload: FileList | File[]) => {
-      const files = Array.from(filesToUpload);
-      if (files.length === 0) {
-        return;
-      }
+  const handleDropUpload = useCallback((files: FileList | File[]) => {
+    if (!canCreate) { toast.error("You don't have permission to upload files"); return; }
+    setDroppedFiles(Array.from(files)); setUploadOpen(true);
+  }, [canCreate]);
 
-      if (!canCreate) {
-        toast.error("You don't have permission to upload files");
-        return;
-      }
-
-      let completedCount = 0;
-      let errorCount = 0;
-      for (const file of files) {
-        const filePath = joinPaths(path, file.name);
-        try {
-          await api.uploadFile(filePath, file);
-          completedCount++;
-        } catch {
-          errorCount++;
-        }
-      }
-
-      if (completedCount > 0) {
-        toast.success(`${completedCount} file(s) uploaded successfully`);
-        handleRefresh();
-      }
-
-      if (errorCount > 0) {
-        toast.error(`${errorCount} file(s) failed to upload`);
-      }
-    },
-    [canCreate, path, handleRefresh]
-  );
+  const handleInternalDrop = async (event: React.DragEvent, destination: string) => {
+    if (!event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE)) return;
+    event.preventDefault(); event.stopPropagation();
+    if (transferring) return;
+    const action = event.ctrlKey || event.metaKey || !canRename ? "copy" : "move";
+    if ((action === "copy" && !canCreate) || (action === "move" && !canRename)) { toast.error("You don't have permission for this transfer"); return; }
+    let dragged: FileItem[];
+    try { dragged = JSON.parse(event.dataTransfer.getData(INTERNAL_DRAG_TYPE)); if (!Array.isArray(dragged) || !dragged.length || dragged.some((item) => typeof item.path !== "string" || typeof item.name !== "string")) return; } catch { return; }
+    setTransferring(true); conflict.reset();
+    try {
+      const result = await transferItems(dragged, destination, action, conflict.resolve, canModify);
+      if (result.completed) { toast.success(`${result.completed} item(s) ${action === "copy" ? "copied" : "moved"}`); handleRefresh(); setSelectedItems([]); }
+      if (result.errors.length) toast.error(result.errors.join("; "));
+    } finally { setTransferring(false); }
+  };
 
   useEffect(() => {
     if (!canCreate || uploadOpen || previewOpen || moveOpen || renameOpen || newFileOpen || newFolderOpen || deleteOpen || shareOpen) {
@@ -326,7 +316,9 @@ export default function FilesClient({}: FilesClientProps) {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div
+      onDragOver={(event) => { if (event.dataTransfer.types.includes(INTERNAL_DRAG_TYPE)) { event.preventDefault(); event.dataTransfer.dropEffect = event.ctrlKey || event.metaKey || !canRename ? "copy" : "move"; } }}
+      onDrop={(event) => void handleInternalDrop(event, path)} className="flex h-full flex-col">
       <Header
         path={path}
         viewMode={viewMode}
@@ -341,6 +333,8 @@ export default function FilesClient({}: FilesClientProps) {
       />
 
       <Breadcrumbs path={path} />
+      {transferring && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">Transferring files…</p>}
+      {conflict.dialog}
 
       {items.length > 0 && (
         <div className="flex flex-col gap-3 border-b bg-muted/30 px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
@@ -397,6 +391,8 @@ export default function FilesClient({}: FilesClientProps) {
 
           <FileList
             items={items}
+            canDrag={canRename || canCreate}
+            onDropItems={(event, destination) => void handleInternalDrop(event, destination)}
             singleClick={user?.singleClick}
             dateFormat={user?.dateFormat}
             locale={user?.locale}
@@ -478,7 +474,8 @@ export default function FilesClient({}: FilesClientProps) {
 
       <UploadDialog
         open={uploadOpen}
-        onOpenChange={setUploadOpen}
+        initialFiles={droppedFiles}
+        onOpenChange={(open) => { setUploadOpen(open); if (!open) setDroppedFiles([]); }}
         path={path}
         onComplete={handleRefresh}
       />

@@ -10,10 +10,20 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/MatinDehghanian/filebrowser/v2/files"
 )
+
+var uploadLocks [64]sync.Mutex
+
+func lockUpload(d *data, path string) func() {
+	h := sha256.Sum256([]byte(fmt.Sprintf("%d:%s", d.user.ID, path)))
+	m := &uploadLocks[int(h[0])%len(uploadLocks)]
+	m.Lock()
+	return m.Unlock
+}
 
 // keepUploadActive periodically touches the cache entry to prevent eviction during transfer.
 func keepUploadActive(cache UploadCache, filePath string) func() {
@@ -41,7 +51,8 @@ func tusStagingPath(destination string) string {
 }
 
 func tusStagingFile(d *data, destination string) (*files.FileInfo, error) {
-	staging := tusStagingPath(destination)
+	staging := tusStagingPath(fmt.Sprintf("%d:%s", d.user.ID, destination))
+	staging = filepath.Join(filepath.Dir(destination), filepath.Base(staging))
 	info, err := d.user.Fs.Stat(staging)
 	if err != nil {
 		return nil, err
@@ -50,17 +61,25 @@ func tusStagingFile(d *data, destination string) (*files.FileInfo, error) {
 }
 
 func tusPostHandler(cache UploadCache) handleFunc {
-	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (status int, result error) {
+		defer func() {
+			if status >= 400 && r.Body != nil {
+				_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 32<<20))
+			}
+		}()
 		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
 		}
+		unlock := lockUpload(d, r.URL.Path)
+		defer unlock()
 		uploadLength, err := getUploadLength(r)
 		if err != nil {
 			return http.StatusBadRequest, err
 		}
 		if info, err := d.user.Fs.Stat(r.URL.Path); err == nil {
 			if info.IsDir() {
-				return http.StatusBadRequest, fmt.Errorf("cannot upload to a directory")
+				w.Header().Set("X-Conflict-Type", "directory")
+				return http.StatusConflict, fmt.Errorf("cannot upload to a directory")
 			}
 			if r.URL.Query().Get("override") != "true" {
 				return http.StatusConflict, nil
@@ -74,7 +93,18 @@ func tusPostHandler(cache UploadCache) handleFunc {
 		if err := d.user.Fs.MkdirAll(filepath.Dir(r.URL.Path), d.settings.DirMode); err != nil {
 			return errToStatus(err), err
 		}
-		staging := tusStagingPath(r.URL.Path)
+		staging := filepath.Join(filepath.Dir(r.URL.Path), filepath.Base(tusStagingPath(fmt.Sprintf("%d:%s", d.user.ID, r.URL.Path))))
+		staged := &files.FileInfo{Fs: d.user.Fs, Path: staging}
+		if _, e := cache.GetLength(staged.RealPath()); errors.Is(e, errUploadMissing) {
+			if e = d.user.Fs.Remove(staging); e != nil && !os.IsNotExist(e) {
+				return errToStatus(e), e
+			}
+		} else if e != nil {
+			return http.StatusServiceUnavailable, e
+		} else {
+			w.Header().Set("X-Conflict-Type", "upload")
+			return http.StatusConflict, nil
+		}
 		file, err := d.user.Fs.OpenFile(staging, os.O_CREATE|os.O_EXCL|os.O_WRONLY, d.settings.FileMode)
 		if err != nil {
 			return errToStatus(err), err
@@ -88,9 +118,23 @@ func tusPostHandler(cache UploadCache) handleFunc {
 				_ = d.user.Fs.Remove(staging)
 				return errToStatus(err), err
 			}
+			if err := d.RunHook(func() error { return nil }, "upload", r.URL.Path, "", d.user); err != nil {
+				return errToStatus(err), err
+			}
 		} else {
 			staged := &files.FileInfo{Fs: d.user.Fs, Path: staging}
-			cache.Register(staged.RealPath(), uploadLength)
+			cache.Register(staged.RealPath(), uploadLength, func() error {
+				// Expiry callbacks run asynchronously. A replacement upload can
+				// already own this staging name when an old callback arrives.
+				unlock := lockUpload(d, r.URL.Path)
+				defer unlock()
+				if _, err := cache.GetLength(staged.RealPath()); err == nil {
+					return nil
+				} else if !errors.Is(err, errUploadMissing) {
+					return err
+				}
+				return d.user.Fs.Remove(staging)
+			}, r.Header.Get("Upload-Fingerprint"), r.URL.Query().Get("override") == "true")
 		}
 		basePath := strings.TrimRight(d.server.BaseURL, "/")
 		w.Header().Set("Location", basePath+"/api/tus"+r.URL.EscapedPath())
@@ -100,6 +144,8 @@ func tusPostHandler(cache UploadCache) handleFunc {
 
 func tusHeadHandler(cache UploadCache) handleFunc {
 	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+		unlock := lockUpload(d, r.URL.Path)
+		defer unlock()
 		w.Header().Set("Cache-Control", "no-store")
 		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
@@ -114,18 +160,30 @@ func tusHeadHandler(cache UploadCache) handleFunc {
 		}
 		w.Header().Set("Upload-Offset", strconv.FormatInt(file.Size, 10))
 		w.Header().Set("Upload-Length", strconv.FormatInt(length, 10))
+		fingerprint, _, err := cache.Metadata(file.RealPath())
+		if err != nil {
+			return http.StatusNotFound, err
+		}
+		w.Header().Set("Upload-Fingerprint", fingerprint)
 		return http.StatusOK, nil
 	})
 }
 
 func tusPatchHandler(cache UploadCache) handleFunc {
-	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	return withUser(func(w http.ResponseWriter, r *http.Request, d *data) (status int, result error) {
+		defer func() {
+			if status >= 400 && r.Body != nil {
+				_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 32<<20))
+			}
+		}()
 		if !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
 		}
 		if r.Header.Get("Content-Type") != "application/offset+octet-stream" {
 			return http.StatusUnsupportedMediaType, nil
 		}
+		unlock := lockUpload(d, r.URL.Path)
+		defer unlock()
 		offset, err := getUploadOffset(r)
 		if err != nil {
 			return http.StatusBadRequest, err
@@ -176,8 +234,17 @@ func tusPatchHandler(cache UploadCache) handleFunc {
 		}
 		newOffset := offset + written
 		if newOffset == length {
-			if _, err := d.user.Fs.Stat(r.URL.Path); err == nil && !d.user.Perm.Modify {
-				return http.StatusForbidden, nil
+			if _, err := d.user.Fs.Stat(r.URL.Path); err == nil {
+				_, overwrite, e := cache.Metadata(file.RealPath())
+				if e != nil {
+					return http.StatusNotFound, e
+				}
+				if !overwrite {
+					return http.StatusConflict, nil
+				}
+				if !d.user.Perm.Modify {
+					return http.StatusForbidden, nil
+				}
 			}
 			if err := d.user.Fs.Rename(file.Path, r.URL.Path); err != nil {
 				return errToStatus(err), err
@@ -194,9 +261,11 @@ func tusPatchHandler(cache UploadCache) handleFunc {
 
 func tusDeleteHandler(cache UploadCache) handleFunc {
 	return withUser(func(_ http.ResponseWriter, r *http.Request, d *data) (int, error) {
-		if r.URL.Path == "/" || !d.user.Perm.Delete || !d.Check(r.URL.Path) {
+		if r.URL.Path == "/" || !d.user.Perm.Create || !d.Check(r.URL.Path) {
 			return http.StatusForbidden, nil
 		}
+		unlock := lockUpload(d, r.URL.Path)
+		defer unlock()
 		file, err := tusStagingFile(d, r.URL.Path)
 		if err != nil {
 			return errToStatus(err), err

@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"os"
 
 	fberrors "github.com/MatinDehghanian/filebrowser/v2/errors"
 	"github.com/MatinDehghanian/filebrowser/v2/settings"
@@ -20,6 +21,9 @@ type ProxyAuth struct {
 // Auth authenticates the user via an HTTP header.
 func (a ProxyAuth) Auth(r *http.Request, usr users.Store, setting *settings.Settings, srv *settings.Server) (*users.User, error) {
 	username := r.Header.Get(a.Header)
+	if username == "" {
+		return nil, os.ErrPermission
+	}
 	user, err := usr.Get(srv.Root, username)
 	if errors.Is(err, fberrors.ErrNotExist) {
 		return a.createUser(usr, setting, srv, username)
@@ -46,6 +50,12 @@ func (a ProxyAuth) createUser(usr users.Store, setting *settings.Settings, srv *
 		LockPassword: true,
 	}
 	setting.Defaults.Apply(user)
+	user.Perm.Admin = false
+	user.Perm.Execute = false
+	user.Commands = []string{}
+	if setting.CreateUserDir {
+		user.Scope = ""
+	}
 
 	var userHome string
 	userHome, err = setting.MakeUserDir(user.Username, user.Scope, srv.Root)
@@ -54,7 +64,7 @@ func (a ProxyAuth) createUser(usr users.Store, setting *settings.Settings, srv *
 	}
 	user.Scope = userHome
 
-	err = usr.Save(user)
+	err = usr.SaveProvisioned(user, setting.CreateUserDir)
 	if err != nil {
 		return nil, err
 	}
