@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.5.1](https://github.com/MatinDehghanian/filebrowser/compare/v0.5.0...v0.5.1) (2026-10-26)
+
+### Features
+
+* add resumable chunked uploads with pause, resume, folder selection and conflict resolution
+* add internal drag-and-drop copy/move and owner-aware share management for administrators
+
+### Bug Fixes
+
+* confine filesystem and public-share access, enforce recursive rules and download permissions
+* harden account provisioning, proxy authentication, share responses and archive entry names
+* protect upload staging, cleanup and destination conflicts while preserving existing files
+* improve subtitle conversion, directory listings, sidebar scrolling and response headers
+* update PostCSS to 8.5.18 and add access-control and transfer regression tests
+
+Implementation: [98ddd306](https://github.com/MatinDehghanian/filebrowser/commit/98ddd306).
+
 ## [0.5.0](https://github.com/MatinDehghanian/filebrowser/compare/v0.4.2...v0.5.0) (2026-10-24)
 
 ### Features
