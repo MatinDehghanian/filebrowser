@@ -21,9 +21,10 @@ import { MoveDialog } from "@/components/dialogs/move-dialog";
 import { ShareDialog } from "@/components/dialogs/share-dialog";
 import { PreviewDialog } from "@/components/dialogs/preview-dialog";
 import { SelectionBar } from "@/components/files/selection-bar";
+import { DownloadMenu, type DownloadFormat } from "@/components/files/download-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 import { decodePath, encodePath } from "@/lib/paths";
 import { joinPaths } from "@/lib/utils";
 import type { FileItem, FileListingResponse, ViewMode, Sorting, User } from "@/types";
@@ -170,6 +171,8 @@ export default function FilesClient({}: FilesClientProps) {
   const canModify = user?.perm?.modify ?? false;
 
   const allSelected = items.length > 0 && selectedItems.length === items.length;
+  // A single file downloads as is; anything else becomes an archive.
+  const singleFileSelected = selectedItems.length === 1 && !selectedItems[0].isDir;
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -184,23 +187,45 @@ export default function FilesClient({}: FilesClientProps) {
     setSelectedItems(nextItems);
   };
 
-  const handleDownloadSelected = () => {
+  // Folders and multiple items are downloaded as one archive in `format`.
+  const handleDownloadSelected = (format: DownloadFormat = "zip") => {
     if (!canDownload) {
       return;
     }
 
+    const archiveUrl = (itemPath: string) => {
+      const url = new URL(api.getDownloadUrl(itemPath), window.location.origin);
+      if (format !== "separate") url.searchParams.set("algo", format);
+      return url;
+    };
+
     if (selectedItems.length === 0) {
-      window.open(api.getDownloadUrl(path), "_blank");
+      window.open(archiveUrl(path).toString(), "_blank");
       return;
     }
 
     if (selectedItems.length === 1) {
-      window.open(api.getDownloadUrl(selectedItems[0].path), "_blank");
+      const [item] = selectedItems;
+      window.open(item.isDir ? archiveUrl(item.path).toString() : api.getDownloadUrl(item.path), "_blank");
       return;
     }
 
-    const baseUrl = api.getDownloadUrl(path);
-    const url = new URL(baseUrl, window.location.origin);
+    if (format === "separate") {
+      // Browsers may ask once to allow several downloads from this site.
+      selectedItems.forEach((item, index) => {
+        window.setTimeout(() => {
+          const link = document.createElement("a");
+          link.href = item.isDir ? archiveUrl(item.path).toString() : api.getDownloadUrl(item.path);
+          link.download = "";
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }, index * 400);
+      });
+      return;
+    }
+
+    const url = archiveUrl(path);
 
     const relativePaths = selectedItems.map((item) => {
       if (!path || path === "/") {
@@ -358,14 +383,20 @@ export default function FilesClient({}: FilesClientProps) {
           </div>
 
           {canDownload && (
-            <Button
-              size="sm"
-              onClick={handleDownloadSelected}
-              className="w-full sm:w-auto"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              {selectedItems.length > 0 ? "Download Selected" : "Download All"}
-            </Button>
+            singleFileSelected ? (
+              <Button size="sm" onClick={() => handleDownloadSelected()} className="w-full sm:w-auto">
+                <Download className="mr-2 h-4 w-4" />
+                Download Selected
+              </Button>
+            ) : (
+              <DownloadMenu onDownload={handleDownloadSelected} allowSeparate={selectedItems.length > 1}>
+                <Button size="sm" className="w-full sm:w-auto">
+                  <Download className="mr-2 h-4 w-4" />
+                  {selectedItems.length > 0 ? "Download Selected" : "Download All"}
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DownloadMenu>
+            )
           )}
         </div>
       )}
@@ -419,6 +450,7 @@ export default function FilesClient({}: FilesClientProps) {
           canCopy={canCreate}
           onShare={() => setShareOpen(true)}
           onDownload={handleDownloadSelected}
+          downloadIsArchive={!singleFileSelected}
           canDelete={canDelete}
           canShare={canShare}
           canDownload={canDownload}

@@ -1,8 +1,9 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { forwardRef, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { X, Trash2, FolderInput, Share2, Download, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DownloadMenu, type DownloadFormat } from "@/components/files/download-menu";
 import { cn } from "@/lib/utils";
 
 interface SelectionBarProps {
@@ -11,7 +12,9 @@ interface SelectionBarProps {
   onDelete: () => void;
   onMove: () => void;
   onShare: () => void;
-  onDownload?: () => void;
+  onDownload?: (format?: DownloadFormat) => void;
+  /** Download opens a menu of archive formats instead of downloading directly. */
+  downloadIsArchive?: boolean;
   canDelete?: boolean;
   canShare?: boolean;
   canDownload?: boolean;
@@ -20,24 +23,25 @@ interface SelectionBarProps {
   onCopy?: () => void;
 }
 
-interface ActionProps {
+// Extra button props let a menu trigger (DownloadMenu) wrap an action.
+interface ActionProps extends Omit<React.ComponentPropsWithoutRef<"button">, "children"> {
   label: string;
   icon: ReactNode;
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
   destructive?: boolean;
 }
 
-function Action({ label, icon, onClick, disabled, title, destructive }: ActionProps) {
+const Action = forwardRef<HTMLButtonElement, ActionProps>(function Action(
+  { label, icon, title, destructive, ...props },
+  ref
+) {
   return (
     <Button
+      ref={ref}
+      {...props}
       variant="ghost"
       size="icon"
       aria-label={label}
       title={title ?? label}
-      onClick={onClick}
-      disabled={disabled}
       className={cn(
         "h-9 w-8 shrink-0 gap-2 sm:w-auto sm:px-3",
         destructive && "text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -47,7 +51,7 @@ function Action({ label, icon, onClick, disabled, title, destructive }: ActionPr
       <span className="hidden sm:inline">{label}</span>
     </Button>
   );
-}
+});
 
 // Keeps the fixed bar over the main content area, so it is centered next to
 // the sidebar rather than in the whole window, including while the sidebar
@@ -87,6 +91,7 @@ export function SelectionBar({
   onMove,
   onShare,
   onDownload,
+  downloadIsArchive = false,
   canDelete = true,
   canShare = true,
   canDownload = true,
@@ -135,9 +140,13 @@ export function SelectionBar({
           />
         )}
 
-        {canDownload && onDownload && (
-          <Action label="Download" icon={<Download className="h-4 w-4" />} onClick={onDownload} />
-        )}
+        {canDownload && onDownload && (downloadIsArchive ? (
+          <DownloadMenu onDownload={onDownload} allowSeparate={selectedCount > 1} align="center" side="top">
+            <Action label="Download" icon={<Download className="h-4 w-4" />} />
+          </DownloadMenu>
+        ) : (
+          <Action label="Download" icon={<Download className="h-4 w-4" />} onClick={() => onDownload()} />
+        ))}
 
         {canDelete && (
           <Action label="Delete" icon={<Trash2 className="h-4 w-4" />} onClick={onDelete} destructive />
