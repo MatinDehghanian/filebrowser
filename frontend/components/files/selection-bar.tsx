@@ -1,7 +1,9 @@
 "use client";
 
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { X, Trash2, FolderInput, Share2, Download, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface SelectionBarProps {
   selectedCount: number;
@@ -18,6 +20,66 @@ interface SelectionBarProps {
   onCopy?: () => void;
 }
 
+interface ActionProps {
+  label: string;
+  icon: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  title?: string;
+  destructive?: boolean;
+}
+
+function Action({ label, icon, onClick, disabled, title, destructive }: ActionProps) {
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={label}
+      title={title ?? label}
+      onClick={onClick}
+      disabled={disabled}
+      className={cn(
+        "h-9 w-8 shrink-0 gap-2 sm:w-auto sm:px-3",
+        destructive && "text-destructive hover:bg-destructive/10 hover:text-destructive"
+      )}
+    >
+      {icon}
+      <span className="hidden sm:inline">{label}</span>
+    </Button>
+  );
+}
+
+// Keeps the fixed bar over the main content area, so it is centered next to
+// the sidebar rather than in the whole window, including while the sidebar
+// collapses or the window resizes.
+function useMainBounds(ref: React.RefObject<HTMLElement | null>) {
+  const [bounds, setBounds] = useState<CSSProperties>();
+
+  useLayoutEffect(() => {
+    const main = ref.current?.closest("main");
+    if (!main) return;
+
+    const update = () => {
+      const rect = main.getBoundingClientRect();
+      setBounds({ left: rect.left, width: rect.width, right: "auto" });
+    };
+    update();
+
+    const observer = new ResizeObserver(update);
+    observer.observe(main);
+    window.addEventListener("resize", update);
+    // The sidebar animates its width; measure again once it settles.
+    document.addEventListener("transitionend", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+      document.removeEventListener("transitionend", update);
+    };
+  }, [ref]);
+
+  return bounds;
+}
+
 export function SelectionBar({
   selectedCount,
   onClear,
@@ -32,81 +94,64 @@ export function SelectionBar({
   canCopy = false,
   onCopy,
 }: SelectionBarProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const bounds = useMainBounds(containerRef);
+
   if (selectedCount === 0) {
     return null;
   }
 
   return (
-    <div className="fixed bottom-3 left-2 right-2 z-50 sm:bottom-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2">
-      <div className="flex justify-around items-center gap-1 overflow-x-auto rounded-lg border bg-background/95 px-2 py-2 shadow-lg backdrop-blur sm:gap-2 sm:px-4">
-        <span className="shrink-0 text-xs font-medium sm:text-sm">
-          {selectedCount} item{selectedCount !== 1 ? "s" : ""} selected
+    <div
+      ref={containerRef}
+      style={bounds}
+      className="pointer-events-none fixed inset-x-0 bottom-3 z-50 flex justify-center px-2 sm:bottom-4 sm:px-4"
+    >
+      <div
+        role="toolbar"
+        aria-label="Selection actions"
+        className="pointer-events-auto flex max-w-full items-center gap-0.5 overflow-x-auto rounded-lg border bg-background/95 p-1.5 shadow-lg backdrop-blur sm:gap-1"
+      >
+        {/* Fixed width so the bar does not resize as the count changes. */}
+        <span className="shrink-0 px-1.5 text-xs font-medium tabular-nums sm:w-32 sm:px-2 sm:text-sm">
+          {selectedCount}
+          <span className="hidden sm:inline"> item{selectedCount !== 1 ? "s" : ""}</span> selected
         </span>
 
-        <div className="mx-1 hidden h-6 w-px bg-border sm:mx-2 sm:block" />
+        <div className="mx-1 hidden h-6 w-px shrink-0 bg-border sm:block" />
 
-        {canMove && <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Move files"
-          onClick={onMove}
-          className="h-8 w-8 shrink-0 gap-2 sm:h-9 sm:w-auto sm:px-3"
-        >
-          <FolderInput className="h-4 w-4" />
-          <span className="hidden sm:inline">Move</span>
-        </Button>}
+        {canMove && <Action label="Move" icon={<FolderInput className="h-4 w-4" />} onClick={onMove} />}
 
-        {canCopy && onCopy && <Button variant="ghost" size="sm" onClick={onCopy} aria-label="Copy files">
-          <Copy className="h-4 w-4" /><span className="hidden sm:inline">Copy</span>
-        </Button>}
+        {canCopy && onCopy && <Action label="Copy" icon={<Copy className="h-4 w-4" />} onClick={onCopy} />}
 
-        {canShare && selectedCount === 1 && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Share file"
-          onClick={onShare}
-            className="h-8 w-8 shrink-0 gap-2 sm:h-9 sm:w-auto sm:px-3"
-          >
-            <Share2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Share</span>
-          </Button>
+        {/* Disabled rather than hidden for several items, so the other buttons stay put. */}
+        {canShare && (
+          <Action
+            label="Share"
+            icon={<Share2 className="h-4 w-4" />}
+            onClick={onShare}
+            disabled={selectedCount !== 1}
+            title={selectedCount === 1 ? "Share" : "Select a single item to share"}
+          />
         )}
 
         {canDownload && onDownload && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Download selected"
-          onClick={onDownload}
-            className="h-8 w-8 shrink-0 gap-2 sm:h-9 sm:w-auto sm:px-3"
-          >
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Download</span>
-          </Button>
+          <Action label="Download" icon={<Download className="h-4 w-4" />} onClick={onDownload} />
         )}
 
         {canDelete && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Delete selected"
-          onClick={onDelete}
-            className="h-8 w-8 shrink-0 gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive sm:h-9 sm:w-auto sm:px-3"
-          >
-            <Trash2 className="h-4 w-4" />
-            <span className="hidden sm:inline">Delete</span>
-          </Button>
+          <Action label="Delete" icon={<Trash2 className="h-4 w-4" />} onClick={onDelete} destructive />
         )}
 
-        <div className="mx-1 hidden h-6 w-px bg-border sm:mx-2 sm:block" />
+        <div className="mx-1 hidden h-6 w-px shrink-0 bg-border sm:block" />
 
         <Button
           variant="ghost"
           size="icon"
           aria-label="Clear selection"
+          title="Clear selection"
           onClick={onClear}
-          className="h-8 w-8 shrink-0"
+          className="h-9 w-8 shrink-0 sm:w-9"
         >
           <X className="h-4 w-4" />
         </Button>
