@@ -479,7 +479,7 @@ export default function TextPreview({
             Indent
             <select
               aria-label="Indentation"
-              className="rounded border bg-background px-1 py-0.5 text-foreground"
+              className="rounded border bg-background px-2 py-0.5 text-foreground"
               value={preferences.indentation}
               onChange={(event) =>
                 updatePreference(
@@ -498,7 +498,7 @@ export default function TextPreview({
             Font
             <select
               aria-label="Editor font size"
-              className="rounded border bg-background px-1 py-0.5 text-foreground"
+              className="rounded border bg-background px-2 py-0.5 text-foreground"
               value={preferences.fontSize}
               onChange={(event) =>
                 updatePreference("fontSize", Number(event.target.value))
