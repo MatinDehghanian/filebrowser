@@ -476,10 +476,14 @@ cmd_install() {
   install_self
 
   if [ "$want_cert" -eq 1 ] && [ -n "$FB_DOMAIN" ]; then
-    cmd_cert_issue || warn "Certificate setup failed; File Browser keeps running over HTTP. Retry with '$APP_NAME cert issue'."
+    cmd_cert_issue "$FB_DOMAIN" "$FB_EMAIL" || warn "Certificate setup failed. Retry with '$APP_NAME cert issue'."
   fi
 
   echo
+  if ! is_running; then
+    err "File Browser is installed but not running. Check '$APP_NAME logs' and '$APP_NAME status'."
+    return 1
+  fi
   ok "File Browser is installed and running."
   printf '  URL:      %s\n' "$(base_url)"
   if [ "$fresh_db" -eq 1 ]; then
@@ -562,7 +566,11 @@ cmd_set_port() {
   FB_PORT="$port"
   save_env
   write_compose
-  compose up -d && ok "File Browser now listens on $(base_url)"
+  if port_in_use "$FB_PORT" && [ "$(port_owner "$FB_PORT")" != "docker-proxy" ]; then
+    die "Port $FB_PORT is used by $(port_owner "$FB_PORT")."
+  fi
+  compose up -d || die "Could not start File Browser on port $FB_PORT."
+  ok "File Browser now listens on $(base_url)"
 }
 
 cmd_uninstall() {
@@ -677,6 +685,11 @@ ensure_renewal() {
   fi
 }
 
+# port_owner <port> prints the name of the process listening on the port.
+port_owner() {
+  ss -ltnpH "sport = :$1" 2>/dev/null | grep -oE 'users:\(\("[^"]+"' | head -n 1 | cut -d'"' -f2
+}
+
 port_in_use() {
   if command -v ss >/dev/null 2>&1; then
     ss -ltnH "sport = :$1" 2>/dev/null | grep -q .
@@ -708,16 +721,25 @@ cmd_cert_issue() {
 
   ensure_certbot
 
-  # certbot's standalone server needs port 80. If File Browser itself holds
-  # it, stop it for the challenge and on every renewal.
-  local hooks=() stopped=0
+  # certbot's standalone server needs port 80. Whoever holds it (File
+  # Browser itself or a web server like nginx) is stopped for the challenge;
+  # the hooks are saved with the certificate so every renewal does the same.
+  local hooks=() stopped=0 owner
   if [ "$FB_PORT" = "80" ] && is_running; then
     compose stop >/dev/null 2>&1 && stopped=1
     hooks=(--pre-hook "$BIN_PATH stop" --post-hook "$BIN_PATH start")
-  fi
-  if port_in_use 80; then
-    warn "Port 80 is used by another program; certbot needs it free to verify your domain:"
-    ss -ltnpH "sport = :80" >&2
+  elif port_in_use 80; then
+    owner="$(port_owner 80)"
+    case "$owner" in
+      nginx | apache2 | httpd | lighttpd)
+        warn "$owner uses port 80; it will be stopped for a few seconds while certbot verifies $domain (also on every renewal)."
+        hooks=(--pre-hook "systemctl stop $owner" --post-hook "systemctl start $owner")
+        ;;
+      *)
+        warn "Port 80 is used by another program; certbot needs it free to verify your domain:"
+        ss -ltnpH "sport = :80" >&2
+        ;;
+    esac
   fi
 
   local email_args=(--register-unsafely-without-email)
@@ -728,6 +750,10 @@ cmd_cert_issue() {
   local mode=(--keep-until-expiring)
   local renewal_conf="/etc/letsencrypt/renewal/$domain.conf"
   if [ -f "$renewal_conf" ] && ! grep -qE '^authenticator *= *standalone' "$renewal_conf"; then
+    mode=(--force-renewal)
+  fi
+  # Same when the renewal hooks changed, otherwise renewals would fail on a busy port 80.
+  if [ -f "$renewal_conf" ] && [ "${#hooks[@]}" -gt 0 ] && ! grep -qF "pre_hook = ${hooks[1]}" "$renewal_conf"; then
     mode=(--force-renewal)
   fi
 
@@ -743,14 +769,22 @@ cmd_cert_issue() {
   FB_DOMAIN="$domain"
   FB_EMAIL="$email"
   FB_TLS="true"
+  # Move from the HTTP defaults to 443, unless something else already uses it.
   if [ "$FB_PORT" = "80" ] || [ "$FB_PORT" = "8080" ]; then
-    FB_PORT=443
+    if [ "$FB_PORT" = "80" ] || ! port_in_use 443; then
+      FB_PORT=443
+    else
+      warn "Port 443 is used by $(port_owner 443), so File Browser stays on port $FB_PORT."
+    fi
   fi
   save_env
   deploy_cert "/etc/letsencrypt/live/$domain" || return 1
-  write_compose
-  compose up -d
   ensure_renewal
+  write_compose
+  if ! compose up -d || ! wait_healthy; then
+    err "File Browser did not start with HTTPS on port $FB_PORT. Pick a free port with '$APP_NAME set-port'."
+    return 1
+  fi
   ok "HTTPS enabled: $(base_url)"
 }
 
