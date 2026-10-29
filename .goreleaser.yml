@@ -41,7 +41,7 @@ builds:
         goarch: arm
 
 archives:
-  - name_template: "{{.Os}}-{{.Arch}}{{if .Arm}}v{{.Arm}}{{end}}-{{ .ProjectName }}"
+  - name_template: "{{.ProjectName}}_{{.Os}}_{{.Arch}}{{if .Arm}}v{{.Arm}}{{end}}"
     formats: ["tar.gz"]
     format_overrides:
       - goos: windows
@@ -185,4 +185,3 @@ docker_manifests:
     image_templates:
       - "docker.io/themattdev/filebrowser:v{{ .Major }}-amd64-s6"
       - "docker.io/themattdev/filebrowser:v{{ .Major }}-arm64-s6"
-
