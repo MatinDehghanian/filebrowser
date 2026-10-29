@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.5.3](https://github.com/MatinDehghanian/filebrowser/compare/v0.5.2...v0.5.3) (2026-10-29)
+
+### Features
+
+* add Docker-based installer and filebrowser management menu ([2fd64c3](https://github.com/MatinDehghanian/filebrowser/commit/2fd64c3057dbf4bef9c3242e03740e027f2e56c4))
+* **installer:** remove old systemd service and nginx site on install ([694f3cc](https://github.com/MatinDehghanian/filebrowser/commit/694f3cc537cf50ca469241f3e6918f32cc4c4908))
+* **installer:** serve File Browser through a running nginx ([8405ee3](https://github.com/MatinDehghanian/filebrowser/commit/8405ee36c273368b1fc04c22f4553b9ba4c78ee9))
+* **installer:** add set-dir and optional run-as-root ([6e05602](https://github.com/MatinDehghanian/filebrowser/commit/6e056025b4d877d91a51590b36eb4338e3f6ab22))
+* **frontend:** choose ZIP, TAR.GZ or separate files when downloading ([5415461](https://github.com/MatinDehghanian/filebrowser/commit/5415461d85a394bd03187e74096f80ccd4667575))
+* **frontend:** write content when creating a new file ([b4bc560](https://github.com/MatinDehghanian/filebrowser/commit/b4bc5600558fc9a52c55cd248aaa0cbc25926023))
+
+### Bug Fixes
+
+* adjust padding in settings pages for consistent layout ([c212462](https://github.com/MatinDehghanian/filebrowser/commit/c2124623fd383724a748c28e4b9e7550708a6ee2))
+* **installer:** handle busy ports and nginx during certificate setup ([f19cf65](https://github.com/MatinDehghanian/filebrowser/commit/f19cf65c348a5d35fe2764f4010c3b8d80516a85))
+* **frontend:** center selection bar over the file area ([5f8bae8](https://github.com/MatinDehghanian/filebrowser/commit/5f8bae85907f25e1375615cf80e9b79016771d5c))
+* **frontend:** make the upload file list scroll ([666c1da](https://github.com/MatinDehghanian/filebrowser/commit/666c1dad0c22c028255bd6a40919af8a946e5022))
+* **frontend:** keep tall dialogs inside the screen ([2ce9aae](https://github.com/MatinDehghanian/filebrowser/commit/2ce9aaee792e44fbfc451c70891832272e8ca466))
+
 ## [0.5.2](https://github.com/MatinDehghanian/filebrowser/compare/v0.5.1...v0.5.2) (2026-10-29)
 
 ### Bug Fixes
