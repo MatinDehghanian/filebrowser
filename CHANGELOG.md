@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.5.2](https://github.com/MatinDehghanian/filebrowser/compare/v0.5.1...v0.5.2) (2026-10-29)
+
+### Bug Fixes
+
+* **goreleaser:** update archive name template for consistency ([c9ac7b5](https://github.com/MatinDehghanian/filebrowser/commit/c9ac7b503809a6e5f27f8b97d3030ba477a46948))
+
 ## [0.5.1](https://github.com/MatinDehghanian/filebrowser/compare/v0.5.0...v0.5.1) (2026-10-26)
 
 ### Features
