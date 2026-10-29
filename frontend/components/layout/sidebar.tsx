@@ -12,6 +12,7 @@ import {
   Sun,
   ChevronLeft,
   ChevronRight,
+  HardDrive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, useIsAdmin } from "@/contexts/auth-context";
@@ -19,6 +20,7 @@ import { useTheme } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Progress } from "@/components/ui/progress";
 import {
   Tooltip,
   TooltipContent,
@@ -159,11 +161,8 @@ export function Sidebar() {
 
         {/* Footer */}
         <div className="border-t p-2">
-          {!collapsed && !publicSettings?.branding.disableUsedPercentage && usage && usage.total > 0 && (
-            <div className="space-y-2 px-3 py-2 text-xs text-muted-foreground">
-              <p>{formatBytes(usage.used)} of {formatBytes(usage.total)} used</p>
-              <progress className="h-2 w-full" value={usage.used} max={usage.total} aria-label="Disk usage" />
-            </div>
+          {!publicSettings?.branding.disableUsedPercentage && usage && usage.total > 0 && (
+            <StorageUsage used={usage.used} total={usage.total} collapsed={collapsed} />
           )}
           {/* Theme Toggle */}
           <Tooltip>
@@ -235,5 +234,41 @@ export function Sidebar() {
         </div>
       </aside>
     </TooltipProvider>
+  );
+}
+
+// Warns in amber from 75% and red from 90% full.
+function StorageUsage({ used, total, collapsed }: { used: number; total: number; collapsed: boolean }) {
+  const percent = Math.min(100, Math.round((used / total) * 100));
+  const tone = percent >= 90 ? "bg-destructive" : percent >= 75 ? "bg-warning" : "bg-primary";
+  const summary = `${formatBytes(used)} of ${formatBytes(total)}`;
+
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div
+            className="mx-auto mb-1 flex h-10 w-10 flex-col items-center justify-center gap-1 rounded-lg text-muted-foreground"
+            aria-label={`Storage: ${summary} used (${percent}%)`}
+          >
+            <HardDrive className="h-4 w-4" />
+            <Progress value={percent} className="h-1 w-6 bg-muted" indicatorClassName={tone} />
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="right">Storage: {summary} used ({percent}%)</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <div className="mb-1 space-y-2 rounded-lg px-3 py-2">
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <HardDrive className="h-4 w-4 shrink-0" />
+        <span className="flex-1">Storage</span>
+        <span className="text-xs font-medium tabular-nums text-foreground">{percent}%</span>
+      </div>
+      <Progress value={percent} className="h-1.5 bg-muted" indicatorClassName={tone} aria-label="Disk usage" />
+      <p className="truncate text-xs tabular-nums text-muted-foreground">{summary}</p>
+    </div>
   );
 }
