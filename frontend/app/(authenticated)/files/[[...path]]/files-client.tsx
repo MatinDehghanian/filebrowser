@@ -33,6 +33,18 @@ interface FilesClientProps {
   params?: never;
 }
 
+// Rendering thousands of results freezes the page, so searches stop here.
+const SEARCH_RESULT_LIMIT = 500;
+
+interface SearchState {
+  items: FileItem[];
+  loading: boolean;
+  truncated: boolean;
+  error: Error | null;
+}
+
+const IDLE_SEARCH: SearchState = { items: [], loading: false, truncated: false, error: null };
+
 export default function FilesClient({}: FilesClientProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -86,15 +98,50 @@ export default function FilesClient({}: FilesClientProps) {
     "";
   const isSearching = searchQuery.length > 0;
 
-  const { data: searchResults, error: searchError, isLoading: isSearchLoading, mutate: mutateSearch } = useSWR(
-    isSearching ? `search:${path}:${searchQuery}` : null,
-    () => api.search(path, searchQuery),
-    { revalidateOnFocus: false },
-  );
+  const [search, setSearch] = useState<SearchState>(IDLE_SEARCH);
+  const [searchRun, setSearchRun] = useState(0);
+
+  // A new query, folder or refresh cancels the running search, which also
+  // stops the server from walking the rest of the tree.
+  useEffect(() => {
+    if (!isSearching) {
+      setSearch(IDLE_SEARCH);
+      return;
+    }
+    const controller = new AbortController();
+    let frame = 0;
+    setSearch({ items: [], loading: true, truncated: false, error: null });
+    api
+      .search(path, searchQuery, {
+        signal: controller.signal,
+        limit: SEARCH_RESULT_LIMIT,
+        // Batch streamed results into one render per frame.
+        onProgress: (found) => {
+          cancelAnimationFrame(frame);
+          frame = requestAnimationFrame(() => setSearch((prev) => ({ ...prev, items: found })));
+        },
+      })
+      .then((result) => {
+        cancelAnimationFrame(frame);
+        setSearch({ items: result.items, loading: false, truncated: Boolean(result.truncated), error: null });
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        cancelAnimationFrame(frame);
+        setSearch((prev) => ({ ...prev, loading: false, error: err instanceof Error ? err : new Error("Search failed") }));
+      });
+    return () => {
+      controller.abort();
+      cancelAnimationFrame(frame);
+    };
+  }, [isSearching, path, searchQuery, searchRun]);
+
+  const searchError = search.error;
+  const isSearchLoading = search.loading && search.items.length === 0;
 
   const items = useMemo(
-    () => (isSearching ? searchResults?.items || [] : data?.items || []),
-    [data?.items, isSearching, searchResults?.items],
+    () => (isSearching ? search.items : data?.items || []),
+    [data?.items, isSearching, search.items],
   );
 
   // Clear selection on path change
@@ -156,8 +203,8 @@ export default function FilesClient({}: FilesClientProps) {
 
   const handleRefresh = useCallback(() => {
     void mutate();
-    if (isSearching) void mutateSearch();
-  }, [mutate, mutateSearch, isSearching]);
+    if (isSearching) setSearchRun((run) => run + 1);
+  }, [mutate, isSearching]);
 
   const closeContextMenu = useCallback(() => {
     setContextMenu(null);
@@ -199,20 +246,23 @@ export default function FilesClient({}: FilesClientProps) {
       return url;
     };
 
-    if (selectedItems.length === 0) {
+    // While searching, "Download Results" means the results, not the folder.
+    const targets = selectedItems.length > 0 || !isSearching ? selectedItems : items;
+
+    if (targets.length === 0) {
       window.open(archiveUrl(path).toString(), "_blank");
       return;
     }
 
-    if (selectedItems.length === 1) {
-      const [item] = selectedItems;
+    if (targets.length === 1) {
+      const [item] = targets;
       window.open(item.isDir ? archiveUrl(item.path).toString() : api.getDownloadUrl(item.path), "_blank");
       return;
     }
 
     if (format === "separate") {
       // Browsers may ask once to allow several downloads from this site.
-      selectedItems.forEach((item, index) => {
+      targets.forEach((item, index) => {
         window.setTimeout(() => {
           const link = document.createElement("a");
           link.href = item.isDir ? archiveUrl(item.path).toString() : api.getDownloadUrl(item.path);
@@ -227,7 +277,7 @@ export default function FilesClient({}: FilesClientProps) {
 
     const url = archiveUrl(path);
 
-    const relativePaths = selectedItems.map((item) => {
+    const relativePaths = targets.map((item) => {
       if (!path || path === "/") {
         return item.path;
       }
@@ -389,10 +439,13 @@ export default function FilesClient({}: FilesClientProps) {
                 Download Selected
               </Button>
             ) : (
-              <DownloadMenu onDownload={handleDownloadSelected} allowSeparate={selectedItems.length > 1}>
+              <DownloadMenu
+                onDownload={handleDownloadSelected}
+                allowSeparate={selectedItems.length > 1 || (isSearching && selectedItems.length === 0 && items.length > 1)}
+              >
                 <Button size="sm" className="w-full sm:w-auto">
                   <Download className="mr-2 h-4 w-4" />
-                  {selectedItems.length > 0 ? "Download Selected" : "Download All"}
+                  {selectedItems.length > 0 ? "Download Selected" : isSearching ? "Download Results" : "Download All"}
                   <ChevronDown className="ml-2 h-4 w-4" />
                 </Button>
               </DownloadMenu>
@@ -414,9 +467,16 @@ export default function FilesClient({}: FilesClientProps) {
       ) : (
         <>
           {isSearching && (
-            <div className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground sm:text-sm">
-              {items.length} result{items.length !== 1 ? "s" : ""} for "
-              {searchQuery}" in {path}
+            <div className="flex items-center gap-2 border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground sm:text-sm">
+              {search.loading && (
+                <div className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              )}
+              <span>
+                {search.truncated ? `First ${items.length}` : items.length} result{items.length !== 1 ? "s" : ""} for "
+                {searchQuery}" in {path}
+                {search.loading && " — searching…"}
+                {search.truncated && " — add more words to narrow the search"}
+              </span>
             </div>
           )}
 

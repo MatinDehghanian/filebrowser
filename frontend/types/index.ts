@@ -165,6 +165,16 @@ export interface TusSettings {
 // Search types
 export interface SearchResult {
   items: FileItem[];
+  /** True when the search stopped at its result limit. */
+  truncated?: boolean;
+}
+
+export interface SearchOptions {
+  signal?: AbortSignal;
+  /** Stop after this many results and cancel the server-side walk. */
+  limit?: number;
+  /** Called with all results found so far while the search streams. */
+  onProgress?: (items: FileItem[]) => void;
 }
 
 // Upload types

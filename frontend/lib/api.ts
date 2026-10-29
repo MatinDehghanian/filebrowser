@@ -8,6 +8,7 @@ import type {
   LoginCredentials,
   AuthResponse,
   SearchResult,
+  SearchOptions,
   ResourceAction,
   ApiError,
   DeepPartial,
@@ -220,7 +221,11 @@ class ApiClient {
   }
 
   // Search
-  async search(path: string, query: string): Promise<SearchResult> {
+  // The server streams one JSON object per line (blank lines are heartbeats),
+  // so results are parsed as they arrive. Hitting `limit` aborts the request,
+  // which also stops the server walking the rest of the tree.
+  async search(path: string, query: string, options: SearchOptions = {}): Promise<SearchResult> {
+    const { signal, limit = Infinity, onProgress } = options;
     const params = new URLSearchParams({ query });
     const headers: HeadersInit = {};
 
@@ -228,50 +233,83 @@ class ApiClient {
       (headers as Record<string, string>)["X-Auth"] = this.token;
     }
 
-    const response = await fetch(`${API_BASE}/search${encodePath(path)}?${params.toString()}`, {
-      method: "GET",
-      headers,
-    });
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal?.reason);
+    if (signal?.aborted) abort();
+    signal?.addEventListener("abort", abort, { once: true });
 
-    if (!response.ok) {
-      throw new ApiRequestError((await response.text()).trim() || "Search failed", response.status);
-    }
-
-    const text = await response.text();
-    const lines = text
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const items = lines
-      .map((line) => {
-        try {
-          return JSON.parse(line) as { path?: string; dir?: boolean; size?: number; modified?: string; mode?: number };
-        } catch {
-          return null;
-        }
-      })
-      .filter((entry): entry is { path: string; dir?: boolean; size?: number; modified?: string; mode?: number } => Boolean(entry?.path))
-      .map((entry) => {
-        const absolutePath = this.toAbsoluteSearchPath(path, entry.path);
-        const name = getFileName(absolutePath);
-        const isDir = Boolean(entry.dir);
-
-        return {
-          path: absolutePath,
-          name,
-          size: entry.size ?? 0,
-          extension: getFileExtension(name),
-          modified: entry.modified || "",
-          mode: entry.mode ?? 0,
-          isDir,
-          isSymlink: false,
-          type: getFileType(name, isDir),
-        };
+    try {
+      const response = await fetch(`${API_BASE}/search${encodePath(path)}?${params.toString()}`, {
+        method: "GET",
+        headers,
+        signal: controller.signal,
       });
 
-    return { items };
+      if (!response.ok) {
+        throw new ApiRequestError((await response.text()).trim() || "Search failed", response.status);
+      }
+
+      const items: FileItem[] = [];
+      let truncated = false;
+      let buffer = "";
+      const decoder = new TextDecoder();
+      const reader = response.body?.getReader();
+
+      const addLine = (line: string) => {
+        const item = this.parseSearchLine(path, line);
+        if (!item) return;
+        if (items.length >= limit) {
+          truncated = true;
+          return;
+        }
+        items.push(item);
+      };
+
+      while (reader && !truncated) {
+        const { done, value } = await reader.read();
+        buffer += decoder.decode(value, { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = done ? "" : lines.pop() ?? "";
+        const before = items.length;
+        lines.forEach(addLine);
+        if (items.length !== before) onProgress?.([...items]);
+        if (done) break;
+      }
+
+      if (truncated) controller.abort();
+      return { items, truncated };
+    } finally {
+      signal?.removeEventListener("abort", abort);
+    }
   }
+
+  private parseSearchLine(scope: string, line: string): FileItem | null {
+    if (!line.trim()) return null;
+    let entry: { path?: string; dir?: boolean; size?: number; modified?: string; mode?: number };
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      return null;
+    }
+    if (!entry.path) return null;
+
+    const absolutePath = this.toAbsoluteSearchPath(scope, entry.path);
+    const name = getFileName(absolutePath);
+    const isDir = Boolean(entry.dir);
+
+    return {
+      path: absolutePath,
+      name,
+      size: entry.size ?? 0,
+      extension: getFileExtension(name),
+      modified: entry.modified || "",
+      mode: entry.mode ?? 0,
+      isDir,
+      isSymlink: false,
+      type: getFileType(name, isDir),
+    };
+  }
+
 
   // Shares
   async getAllShares(): Promise<Share[]> {
