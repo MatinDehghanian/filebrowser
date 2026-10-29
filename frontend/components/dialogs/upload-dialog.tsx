@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, formatBytes, joinPaths } from "@/lib/utils";
 import api from "@/lib/api";
 import { uploadResumable } from "@/lib/transfers";
@@ -234,16 +233,17 @@ export function UploadDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+        {/* Capped to the screen height; only the file list scrolls. */}
+        <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-lg" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Upload Files</DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
             {/* Drop Zone */}
             <div
               className={cn(
-                "flex flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed p-8 transition-colors",
+                "flex shrink-0 flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed p-8 transition-colors",
                 isDragging
                   ? "border-primary bg-primary/5"
                   : "border-muted-foreground/25",
@@ -280,7 +280,7 @@ export function UploadDialog({
               />
             </div>
 
-            <label className="block cursor-pointer text-sm text-primary">
+            <label className="block shrink-0 cursor-pointer text-sm text-primary">
               Or select a folder
               <input
                 type="file"
@@ -293,7 +293,7 @@ export function UploadDialog({
             </label>
             {/* File List */}
             {files.length > 0 && (
-              <ScrollArea className="max-h-60">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1 sm:max-h-72">
                 <div className="space-y-2">
                   {files.map((uploadFile, index) => (
                     <div
@@ -348,11 +348,11 @@ export function UploadDialog({
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             )}
 
             {/* Actions */}
-            <div className="flex justify-end gap-2">
+            <div className="flex shrink-0 justify-end gap-2">
               {isUploading && (
                 <Button
                   variant="outline"
