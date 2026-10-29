@@ -67,18 +67,19 @@ func Search(ctx context.Context,
 			}
 		}
 
-		if len(search.Terms) > 0 {
-			for _, term := range search.Terms {
-				_, fileName := path.Split(fPath)
-				if !search.CaseSensitive {
-					fileName = strings.ToLower(fileName)
-					term = strings.ToLower(term)
-				}
-				if strings.Contains(fileName, term) {
-					return found(relativePath, f)
-				}
+		// Every term must appear in the file name, so adding words narrows
+		// the results instead of widening them.
+		_, fileName := path.Split(fPath)
+		if !search.CaseSensitive {
+			fileName = strings.ToLower(fileName)
+		}
+		for _, term := range search.Terms {
+			if !search.CaseSensitive {
+				term = strings.ToLower(term)
 			}
-			return nil
+			if !strings.Contains(fileName, term) {
+				return nil
+			}
 		}
 
 		return found(relativePath, f)

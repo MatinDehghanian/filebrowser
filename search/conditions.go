@@ -97,6 +97,7 @@ func parseSearch(value string) *searchOptions {
 		return opts
 	}
 
-	opts.Terms = strings.Split(value, " ")
+	// Fields ignores repeated spaces; an empty term would match every file.
+	opts.Terms = strings.Fields(value)
 	return opts
 }
