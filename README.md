@@ -12,21 +12,41 @@ File Browser provides a file managing interface within a specified directory and
 
 There are several ways to install File Browser.
 
-### Online Installation (from GitHub)
+### Online Installation (Docker, recommended for servers)
 
-You can install File Browser with a single command:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/MatinDehghanian/filebrowser/master/install.sh | bash
-```
-
-or
+On a Linux server, run as root:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/MatinDehghanian/filebrowser/master/install.sh | bash
+bash <(curl -fsSL https://raw.githubusercontent.com/MatinDehghanian/filebrowser/master/install.sh)
 ```
 
-This script will download and install the latest version of File Browser to `/usr/local/bin`.
+The installer:
+
+- installs Docker and the Docker Compose plugin if they are missing,
+- runs File Browser in a container (data lives in `/opt/filebrowser`),
+- asks for the shared directory, port and the admin username/password,
+- can get a free Let's Encrypt certificate and switch File Browser to HTTPS (renewed automatically).
+
+Afterwards, type `filebrowser` to open the management menu:
+
+```
+  Service
+   1) Install / reinstall
+   2) Start            3) Stop            4) Restart
+   5) Status           6) Logs            7) Update
+
+  Users
+   8) List users       9) Add user       10) Change password
+  11) Change username 12) Admin rights   13) Delete user
+
+  HTTPS certificate
+  14) Issue certificate
+  15) Renew certificate
+  16) Disable HTTPS
+  ...
+```
+
+Every entry is also a sub-command, for example `filebrowser users passwd admin`, `filebrowser cert issue files.example.com` or `filebrowser cert renew --force`. Run `filebrowser help` for the full list. To run the File Browser binary itself inside the container, use `filebrowser cli <args>`.
 
 ### Offline Installation
 
