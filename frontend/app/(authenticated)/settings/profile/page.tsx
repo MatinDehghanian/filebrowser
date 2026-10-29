@@ -117,7 +117,7 @@ export default function ProfileSettingsPage() {
   };
 
   return (
-    <div className="container max-w-3xl py-8">
+    <div className="container max-w-3xl px-8 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Profile Settings</h1>
         <p className="text-muted-foreground">

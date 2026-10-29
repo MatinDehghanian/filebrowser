@@ -106,7 +106,7 @@ export default function GlobalSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="container max-w-3xl py-8">
+      <div className="container max-w-3xl px-8 py-8">
         <div className="flex items-center justify-center py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
@@ -116,7 +116,7 @@ export default function GlobalSettingsPage() {
 
   if (!settings) {
     return (
-      <div className="container max-w-3xl py-8">
+      <div className="container max-w-3xl px-8 py-8">
         <div className="text-center py-16">
           <p className="text-destructive">Failed to load settings</p>
         </div>
@@ -125,7 +125,7 @@ export default function GlobalSettingsPage() {
   }
 
   return (
-    <div className="container max-w-3xl py-8">
+    <div className="container max-w-3xl px-8 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">Global Settings</h1>
         <p className="text-muted-foreground">
@@ -172,8 +172,12 @@ export default function GlobalSettingsPage() {
                 </p>
               </div>
               <Switch
-                checked={currentSettings.branding?.disableUsedPercentage ?? false}
-                onCheckedChange={(v) => updateBranding("disableUsedPercentage", v)}
+                checked={
+                  currentSettings.branding?.disableUsedPercentage ?? false
+                }
+                onCheckedChange={(v) =>
+                  updateBranding("disableUsedPercentage", v)
+                }
               />
             </div>
           </CardContent>
@@ -217,11 +221,14 @@ export default function GlobalSettingsPage() {
               <Input
                 id="user-home-base"
                 value={currentSettings.userHomeBasePath || ""}
-                onChange={(e) => updateField("userHomeBasePath", e.target.value)}
+                onChange={(e) =>
+                  updateField("userHomeBasePath", e.target.value)
+                }
                 placeholder="/users"
               />
               <p className="text-xs text-muted-foreground">
-                Base path for user home directories (e.g., /users will create /users/username)
+                Base path for user home directories (e.g., /users will create
+                /users/username)
               </p>
             </div>
           </CardContent>
@@ -231,9 +238,7 @@ export default function GlobalSettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Default User Settings</CardTitle>
-            <CardDescription>
-              Default settings for new users
-            </CardDescription>
+            <CardDescription>Default settings for new users</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
