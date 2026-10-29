@@ -1,20 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { toast } from "sonner";
+import { lazy, Suspense, useState } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { joinPaths } from "@/lib/utils";
-import api from "@/lib/api";
-import { validateName } from "@/lib/paths";
+
+const NewFileEditor = lazy(() => import("./new-file-editor"));
 
 interface NewFileDialogProps {
   open: boolean;
@@ -29,80 +24,50 @@ export function NewFileDialog({
   path,
   onComplete,
 }: NewFileDialogProps) {
-  const [name, setName] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      toast.error("Please enter a file name");
-      return;
-    }
-
-    const nameError = validateName(name);
-    if (nameError) {
-      toast.error(nameError);
-      return;
-    }
-
-    setIsCreating(true);
-
-    try {
-      const filePath = joinPaths(path, name.trim());
-      await api.createFile(filePath);
-      toast.success("File created successfully");
-      onComplete();
-      setName("");
-      onOpenChange(false);
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to create file"
-      );
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const handleClose = () => {
-    if (isCreating) return;
-    setName("");
+  const close = () => {
+    setDirty(false);
     onOpenChange(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !isCreating) {
-      handleCreate();
+  const handleOpenChange = (next: boolean) => {
+    if (next) {
+      onOpenChange(true);
+      return;
     }
+    if (dirty && !window.confirm("Discard this new file?")) return;
+    close();
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent className="flex h-[85dvh] max-h-[calc(100dvh-2rem)] w-[96vw] max-w-4xl flex-col gap-3 overflow-hidden p-4 sm:p-6">
+        <DialogHeader className="shrink-0">
           <DialogTitle>New File</DialogTitle>
+          <DialogDescription>Choose a name and extension, write the content, then create it.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="file-name">File Name</Label>
-            <Input
-              id="file-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Enter file name (e.g., document.txt)"
-              autoFocus
+        {/* Remounted on every open, so each new file starts empty. */}
+        {open && (
+          <Suspense
+            fallback={
+              <div className="flex flex-1 items-center justify-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            }
+          >
+            <NewFileEditor
+              path={path}
+              onDirtyChange={setDirty}
+              onCancel={() => handleOpenChange(false)}
+              onCreated={() => {
+                onComplete();
+                close();
+              }}
             />
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isCreating}>
-            Cancel
-          </Button>
-          <Button onClick={handleCreate} disabled={isCreating || !name.trim()}>
-            {isCreating ? "Creating..." : "Create"}
-          </Button>
-        </DialogFooter>
+          </Suspense>
+        )}
       </DialogContent>
     </Dialog>
   );
