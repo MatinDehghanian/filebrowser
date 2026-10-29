@@ -120,7 +120,7 @@ export default function SharesSettingsPage() {
   };
 
   return (
-    <div className="container max-w-4xl py-8">
+    <div className="container max-w-4xl px-8 py-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">My Shares</h1>
         <p className="text-muted-foreground">
@@ -131,9 +131,7 @@ export default function SharesSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Active Shares</CardTitle>
-          <CardDescription>
-            All your shared links in one place
-          </CardDescription>
+          <CardDescription>All your shared links in one place</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -148,7 +146,11 @@ export default function SharesSettingsPage() {
               <p className="text-sm text-muted-foreground mt-1">
                 {(error as ApiError).message || "Please try again."}
               </p>
-              <Button className="mt-4" variant="outline" onClick={() => mutate()}>
+              <Button
+                className="mt-4"
+                variant="outline"
+                onClick={() => mutate()}
+              >
                 Retry
               </Button>
             </div>
@@ -181,7 +183,7 @@ export default function SharesSettingsPage() {
                   const expiryStatus = getExpiryStatus(share);
                   const isDir = share.path.endsWith("/");
                   const isProtected = share.hasPassword;
-                  
+
                   return (
                     <TableRow key={share.hash}>
                       <TableCell>
@@ -262,7 +264,10 @@ export default function SharesSettingsPage() {
         </CardContent>
       </Card>
 
-      <AlertDialog open={!!deleteShare} onOpenChange={() => setDeleteShare(null)}>
+      <AlertDialog
+        open={!!deleteShare}
+        onOpenChange={() => setDeleteShare(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Share</AlertDialogTitle>

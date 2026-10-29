@@ -209,7 +209,7 @@ export default function UsersSettingsPage() {
   };
 
   return (
-    <div className="container max-w-5xl py-8">
+    <div className="container max-w-5xl px-8 py-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">User Management</h1>
@@ -226,9 +226,7 @@ export default function UsersSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Users</CardTitle>
-          <CardDescription>
-            All registered users in the system
-          </CardDescription>
+          <CardDescription>All registered users in the system</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -284,13 +282,19 @@ export default function UsersSettingsPage() {
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {user.perm.create && (
-                          <Badge variant="outline" className="text-xs">Create</Badge>
+                          <Badge variant="outline" className="text-xs">
+                            Create
+                          </Badge>
                         )}
                         {user.perm.delete && (
-                          <Badge variant="outline" className="text-xs">Delete</Badge>
+                          <Badge variant="outline" className="text-xs">
+                            Delete
+                          </Badge>
                         )}
                         {user.perm.share && (
-                          <Badge variant="outline" className="text-xs">Share</Badge>
+                          <Badge variant="outline" className="text-xs">
+                            Share
+                          </Badge>
                         )}
                       </div>
                     </TableCell>
@@ -393,10 +397,12 @@ export default function UsersSettingsPage() {
 
             <div className="space-y-3">
               <Label>Permissions</Label>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="perm-admin" className="font-normal">Administrator</Label>
+                  <Label htmlFor="perm-admin" className="font-normal">
+                    Administrator
+                  </Label>
                   <Switch
                     id="perm-admin"
                     checked={formData.perm.admin}
@@ -404,7 +410,9 @@ export default function UsersSettingsPage() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="perm-create" className="font-normal">Create</Label>
+                  <Label htmlFor="perm-create" className="font-normal">
+                    Create
+                  </Label>
                   <Switch
                     id="perm-create"
                     checked={formData.perm.create}
@@ -412,7 +420,9 @@ export default function UsersSettingsPage() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="perm-rename" className="font-normal">Rename</Label>
+                  <Label htmlFor="perm-rename" className="font-normal">
+                    Rename
+                  </Label>
                   <Switch
                     id="perm-rename"
                     checked={formData.perm.rename}
@@ -420,7 +430,9 @@ export default function UsersSettingsPage() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="perm-modify" className="font-normal">Modify</Label>
+                  <Label htmlFor="perm-modify" className="font-normal">
+                    Modify
+                  </Label>
                   <Switch
                     id="perm-modify"
                     checked={formData.perm.modify}
@@ -428,7 +440,9 @@ export default function UsersSettingsPage() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="perm-delete" className="font-normal">Delete</Label>
+                  <Label htmlFor="perm-delete" className="font-normal">
+                    Delete
+                  </Label>
                   <Switch
                     id="perm-delete"
                     checked={formData.perm.delete}
@@ -436,7 +450,9 @@ export default function UsersSettingsPage() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="perm-share" className="font-normal">Share</Label>
+                  <Label htmlFor="perm-share" className="font-normal">
+                    Share
+                  </Label>
                   <Switch
                     id="perm-share"
                     checked={formData.perm.share}
@@ -444,7 +460,9 @@ export default function UsersSettingsPage() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="perm-download" className="font-normal">Download</Label>
+                  <Label htmlFor="perm-download" className="font-normal">
+                    Download
+                  </Label>
                   <Switch
                     id="perm-download"
                     checked={formData.perm.download}
@@ -452,7 +470,9 @@ export default function UsersSettingsPage() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="perm-execute" className="font-normal">Execute</Label>
+                  <Label htmlFor="perm-execute" className="font-normal">
+                    Execute
+                  </Label>
                   <Switch
                     id="perm-execute"
                     checked={formData.perm.execute}
@@ -487,8 +507,8 @@ export default function UsersSettingsPage() {
               {isSubmitting
                 ? "Saving..."
                 : editingUser
-                ? "Save Changes"
-                : "Create User"}
+                  ? "Save Changes"
+                  : "Create User"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -508,12 +528,14 @@ export default function UsersSettingsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete User</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the user &quot;{deleteUser?.username}&quot;?
-              This action cannot be undone.
+              Are you sure you want to delete the user &quot;
+              {deleteUser?.username}&quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="delete-current-password">Your Current Password</Label>
+            <Label htmlFor="delete-current-password">
+              Your Current Password
+            </Label>
             <Input
               id="delete-current-password"
               type="password"
