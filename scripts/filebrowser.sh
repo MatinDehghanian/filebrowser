@@ -23,6 +23,7 @@ DB_FILE="$APP_DIR/data/database/filebrowser.db"
 CERT_DIR="$APP_DIR/certs"
 BIN_PATH="/usr/local/bin/$APP_NAME"
 CRON_FILE="/etc/cron.d/$APP_NAME-certbot"
+NGINX_MARKER="# Managed by filebrowser."
 SCRIPT_URL="${FB_SCRIPT_URL:-https://raw.githubusercontent.com/MatinDehghanian/filebrowser/master/scripts/filebrowser.sh}"
 
 # The container runs as this UID/GID (see Dockerfile).
@@ -37,6 +38,8 @@ FB_FILES_DIR="${FB_FILES_DIR:-$APP_DIR/files}"
 FB_DOMAIN="${FB_DOMAIN:-}"
 FB_EMAIL="${FB_EMAIL:-}"
 FB_TLS="${FB_TLS:-false}"
+# "nginx" when an existing nginx serves File Browser on https://$FB_DOMAIN.
+FB_PROXY="${FB_PROXY:-none}"
 
 # ---------------------------------------------------------------------------
 # Output helpers
@@ -162,6 +165,7 @@ save_env() {
     printf 'FB_DOMAIN=%q\n' "$FB_DOMAIN"
     printf 'FB_EMAIL=%q\n' "$FB_EMAIL"
     printf 'FB_TLS=%q\n' "$FB_TLS"
+    printf 'FB_PROXY=%q\n' "$FB_PROXY"
   } >"$ENV_FILE"
   chmod 600 "$ENV_FILE"
 }
@@ -226,7 +230,9 @@ ensure_docker() {
 }
 
 write_compose() {
-  local tls_env="" tls_volume="" healthcheck=""
+  local tls_env="" tls_volume="" healthcheck="" publish="$FB_PORT:80"
+  # Behind nginx the port is only reachable from this server.
+  [ "$FB_PROXY" = "nginx" ] && publish="127.0.0.1:$FB_PORT:80"
   if [ "$FB_TLS" = "true" ]; then
     tls_env="
     environment:
@@ -248,7 +254,7 @@ services:
     container_name: $APP_NAME
     restart: unless-stopped
     ports:
-      - "$FB_PORT:80"
+      - "$publish"
     volumes:
       - "$FB_FILES_DIR:/srv"
       - "$APP_DIR/data/database:/database"
@@ -274,6 +280,10 @@ is_running() {
 
 base_url() {
   local scheme="http" host port_suffix=""
+  if [ "$FB_PROXY" = "nginx" ]; then
+    printf 'https://%s' "$FB_DOMAIN"
+    return
+  fi
   [ "$FB_TLS" = "true" ] && scheme="https"
   host="${FB_DOMAIN:-$(server_ip)}"
   if ! { [ "$scheme" = "http" ] && [ "$FB_PORT" = "80" ]; } && ! { [ "$scheme" = "https" ] && [ "$FB_PORT" = "443" ]; }; then
@@ -350,6 +360,7 @@ cmd_cleanup_legacy() {
   local sites=() site domains=()
   for site in /etc/nginx/sites-enabled/filebrowser /etc/nginx/sites-available/filebrowser /etc/nginx/conf.d/filebrowser.conf; do
     [ -e "$site" ] || [ -L "$site" ] || continue
+    [ -f "$site" ] && grep -q "^$NGINX_MARKER" "$site" && continue
     sites+=("$site")
     if [ -f "$site" ]; then
       # shellcheck disable=SC2207
@@ -531,9 +542,17 @@ cmd_status() {
   printf '  Image:      %s\n' "$FB_IMAGE"
   printf '  Files:      %s\n' "$FB_FILES_DIR"
   printf '  Data:       %s\n' "$APP_DIR/data"
-  printf '  HTTPS:      %s\n' "$([ "$FB_TLS" = "true" ] && echo "on ($FB_DOMAIN)" || echo "off")"
-  if [ "$FB_TLS" = "true" ] && [ -f "$CERT_DIR/fullchain.pem" ] && command -v openssl >/dev/null 2>&1; then
-    printf '  Cert until: %s\n' "$(openssl x509 -enddate -noout -in "$CERT_DIR/fullchain.pem" | cut -d= -f2)"
+  local https="off" cert=""
+  if [ "$FB_PROXY" = "nginx" ]; then
+    https="on via nginx ($FB_DOMAIN, File Browser on 127.0.0.1:$FB_PORT)"
+    cert="/etc/letsencrypt/live/$FB_DOMAIN/fullchain.pem"
+  elif [ "$FB_TLS" = "true" ]; then
+    https="on ($FB_DOMAIN)"
+    cert="$CERT_DIR/fullchain.pem"
+  fi
+  printf '  HTTPS:      %s\n' "$https"
+  if [ -n "$cert" ] && [ -f "$cert" ] && command -v openssl >/dev/null 2>&1; then
+    printf '  Cert until: %s\n' "$(openssl x509 -enddate -noout -in "$cert" | cut -d= -f2)"
   fi
 }
 
@@ -570,6 +589,9 @@ cmd_set_port() {
     die "Port $FB_PORT is used by $(port_owner "$FB_PORT")."
   fi
   compose up -d || die "Could not start File Browser on port $FB_PORT."
+  if [ "$FB_PROXY" = "nginx" ]; then
+    write_nginx_site || die "Could not update the nginx site."
+  fi
   ok "File Browser now listens on $(base_url)"
 }
 
@@ -578,6 +600,7 @@ cmd_uninstall() {
   require_installed
   confirm "Remove the File Browser container?" n || return 0
   compose down --remove-orphans
+  remove_nginx_site
   rm -f "$CRON_FILE"
   if confirm "Also DELETE all data in $APP_DIR/data (users, settings, shares)? Shared files in $FB_FILES_DIR are not touched" n; then
     rm -rf "$APP_DIR/data" "$CERT_DIR"
@@ -657,7 +680,7 @@ user_admin() {
 }
 
 # ---------------------------------------------------------------------------
-# Commands: certificates (Let's Encrypt via certbot, standalone mode)
+# Commands: certificates (Let's Encrypt via certbot)
 # ---------------------------------------------------------------------------
 
 ensure_certbot() {
@@ -721,19 +744,26 @@ cmd_cert_issue() {
 
   ensure_certbot
 
+  # A running nginx owns ports 80/443 and usually serves other sites too, so
+  # File Browser goes behind it instead of competing for the ports.
+  if nginx_active; then
+    cert_issue_nginx "$domain" "$email"
+    return
+  fi
+
   # certbot's standalone server needs port 80. Whoever holds it (File
-  # Browser itself or a web server like nginx) is stopped for the challenge;
+  # Browser itself or another web server) is stopped for the challenge;
   # the hooks are saved with the certificate so every renewal does the same.
-  local hooks=() stopped=0 owner
+  local pre="" post="" owner
   if [ "$FB_PORT" = "80" ] && is_running; then
-    compose stop >/dev/null 2>&1 && stopped=1
-    hooks=(--pre-hook "$BIN_PATH stop" --post-hook "$BIN_PATH start")
+    compose stop >/dev/null 2>&1
+    pre="$BIN_PATH stop" post="$BIN_PATH start"
   elif port_in_use 80; then
     owner="$(port_owner 80)"
     case "$owner" in
-      nginx | apache2 | httpd | lighttpd)
+      apache2 | httpd | lighttpd)
         warn "$owner uses port 80; it will be stopped for a few seconds while certbot verifies $domain (also on every renewal)."
-        hooks=(--pre-hook "systemctl stop $owner" --post-hook "systemctl start $owner")
+        pre="systemctl stop $owner" post="systemctl start $owner"
         ;;
       *)
         warn "Port 80 is used by another program; certbot needs it free to verify your domain:"
@@ -742,33 +772,22 @@ cmd_cert_issue() {
     esac
   fi
 
-  local email_args=(--register-unsafely-without-email)
-  [ -n "$email" ] && email_args=(-m "$email")
-
-  # An existing certificate obtained another way (e.g. certbot --nginx) would
-  # keep renewing that way, so replace it with a standalone one.
-  local mode=(--keep-until-expiring)
-  local renewal_conf="/etc/letsencrypt/renewal/$domain.conf"
-  if [ -f "$renewal_conf" ] && ! grep -qE '^authenticator *= *standalone' "$renewal_conf"; then
-    mode=(--force-renewal)
-  fi
-  # Same when the renewal hooks changed, otherwise renewals would fail on a busy port 80.
-  if [ -f "$renewal_conf" ] && [ "${#hooks[@]}" -gt 0 ] && ! grep -qF "pre_hook = ${hooks[1]}" "$renewal_conf"; then
-    mode=(--force-renewal)
-  fi
-
-  info "Requesting a certificate for $domain..."
-  if ! certbot certonly --standalone --non-interactive --agree-tos "${email_args[@]}" \
-    -d "$domain" "${mode[@]}" "${hooks[@]}" \
-    --deploy-hook "$BIN_PATH cert-deploy"; then
-    [ "$stopped" -eq 1 ] && compose start >/dev/null 2>&1
-    err "certbot failed. Check that $domain points to this server and port 80 is reachable."
-    return 1
+  if cert_reusable "$domain"; then
+    info "Reusing the existing certificate for $domain."
+    adopt_cert "$domain" standalone "$pre" "$post" "$BIN_PATH cert-deploy"
+  else
+    local hooks=()
+    [ -n "$pre" ] && hooks=(--pre-hook "$pre" --post-hook "$post")
+    if ! obtain_cert standalone "$domain" "$email" "${hooks[@]}" --deploy-hook "$BIN_PATH cert-deploy"; then
+      [ -n "$pre" ] && [ "$owner" = "" ] && compose up -d >/dev/null 2>&1
+      return 1
+    fi
   fi
 
   FB_DOMAIN="$domain"
   FB_EMAIL="$email"
   FB_TLS="true"
+  FB_PROXY="none"
   # Move from the HTTP defaults to 443, unless something else already uses it.
   if [ "$FB_PORT" = "80" ] || [ "$FB_PORT" = "8080" ]; then
     if [ "$FB_PORT" = "80" ] || ! port_in_use 443; then
@@ -788,6 +807,187 @@ cmd_cert_issue() {
   ok "HTTPS enabled: $(base_url)"
 }
 
+# cert_issue_nginx serves File Browser on https://<domain> through nginx.
+# The container only listens on 127.0.0.1 and nginx terminates TLS.
+cert_issue_nginx() {
+  local domain="$1" email="$2"
+  info "nginx is running on this server; File Browser will be served through it."
+
+  if ! certbot plugins --text 2>/dev/null | grep -q '^\* nginx'; then
+    info "Installing the certbot nginx plugin..."
+    pkg_install python3-certbot-nginx || die "Could not install python3-certbot-nginx."
+  fi
+
+  FB_DOMAIN="$domain"
+  FB_EMAIL="$email"
+  FB_TLS="false"
+  FB_PROXY="nginx"
+  case "$FB_PORT" in 80 | 443) FB_PORT=8080 ;; esac
+  save_env
+  write_compose
+  if ! compose up -d || ! wait_healthy; then
+    err "File Browser did not start on 127.0.0.1:$FB_PORT. Pick a free port with '$APP_NAME set-port'."
+    return 1
+  fi
+
+  write_nginx_site || return 1
+
+  if cert_reusable "$domain"; then
+    info "Reusing the existing certificate for $domain."
+    adopt_cert "$domain" nginx "" "" "systemctl reload nginx"
+  else
+    obtain_cert nginx "$domain" "$email" --deploy-hook "systemctl reload nginx" || return 1
+  fi
+
+  write_nginx_site || return 1
+  ensure_renewal
+  ok "HTTPS enabled: $(base_url)"
+}
+
+# obtain_cert <authenticator> <domain> <email> [extra certbot args...]
+obtain_cert() {
+  local auth="$1" domain="$2" email="$3"
+  shift 3
+  local email_args=(--register-unsafely-without-email)
+  [ -n "$email" ] && email_args=(-m "$email")
+  info "Requesting a certificate for $domain..."
+  if ! certbot certonly "--$auth" --non-interactive --agree-tos "${email_args[@]}" \
+    -d "$domain" --keep-until-expiring "$@"; then
+    err "certbot failed. Check that $domain points to this server and port 80 is reachable."
+    return 1
+  fi
+}
+
+# cert_reusable is true when a certificate for the domain exists and is valid
+# for at least 30 more days. Reusing it avoids Let's Encrypt's limit of five
+# duplicate certificates per week.
+cert_reusable() {
+  local cert="/etc/letsencrypt/live/$1/fullchain.pem"
+  [ -f "$cert" ] && command -v openssl >/dev/null 2>&1 && openssl x509 -checkend 2592000 -noout -in "$cert" >/dev/null 2>&1
+}
+
+# adopt_cert <domain> <authenticator> <pre-hook> <post-hook> <deploy-hook>
+# switches how an existing certificate renews (e.g. one made by certbot
+# --nginx) without requesting a new one, then checks it with a dry run.
+adopt_cert() {
+  local domain="$1" auth="$2" pre="$3" post="$4" deploy="$5"
+  local conf="/etc/letsencrypt/renewal/$domain.conf"
+  [ -f "$conf" ] || { err "No renewal configuration found at $conf"; return 1; }
+  cp "$conf" "$conf.bak"
+  awk -v auth="$auth" -v pre="$pre" -v post="$post" -v deploy="$deploy" '
+    /^(authenticator|installer|pre_hook|post_hook|renew_hook|http01_port) *=/ { next }
+    { print }
+    /^\[renewalparams\]/ {
+      print "authenticator = " auth
+      if (pre != "") print "pre_hook = " pre
+      if (post != "") print "post_hook = " post
+      print "renew_hook = " deploy
+    }' "$conf.bak" >"$conf"
+  info "Testing automatic renewal (dry run)..."
+  if certbot renew --dry-run --cert-name "$domain" >/dev/null 2>&1; then
+    ok "Automatic renewal works."
+  else
+    warn "The renewal dry run failed; check with: certbot renew --dry-run --cert-name $domain"
+  fi
+}
+
+nginx_active() {
+  command -v nginx >/dev/null 2>&1 && systemctl is-active --quiet nginx 2>/dev/null
+}
+
+nginx_site_path() {
+  if [ -d /etc/nginx/sites-available ]; then
+    echo /etc/nginx/sites-available/filebrowser
+  else
+    echo /etc/nginx/conf.d/filebrowser.conf
+  fi
+}
+
+# write_nginx_site writes the reverse-proxy site for $FB_DOMAIN. The HTTPS
+# server is added once a certificate exists; until then plain HTTP is served
+# so certbot can verify the domain.
+write_nginx_site() {
+  local site cert_dir="/etc/letsencrypt/live/$FB_DOMAIN" tls=0 previous=""
+  site="$(nginx_site_path)"
+  [ -f "$cert_dir/fullchain.pem" ] && tls=1
+  [ -f "$site" ] && previous="$(cat "$site")"
+
+  local proxy
+  proxy="    client_max_body_size 0;
+
+    location / {
+        proxy_pass http://127.0.0.1:$FB_PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$filebrowser_connection;
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 1h;
+        proxy_send_timeout 1h;
+    }"
+
+  {
+    echo "$NGINX_MARKER Regenerated by '$APP_NAME'; manual edits are overwritten."
+    echo "map \$http_upgrade \$filebrowser_connection {"
+    echo "    default upgrade;"
+    echo "    ''      close;"
+    echo "}"
+    echo
+    echo "server {"
+    echo "    listen 80;"
+    echo "    listen [::]:80;"
+    echo "    server_name $FB_DOMAIN;"
+    echo
+    if [ "$tls" -eq 1 ]; then
+      # A location (not a server-level return) so certbot's challenge
+      # location still takes precedence during renewals.
+      echo "    location / {"
+      echo "        return 301 https://\$host\$request_uri;"
+      echo "    }"
+    else
+      echo "$proxy"
+    fi
+    echo "}"
+    if [ "$tls" -eq 1 ]; then
+      echo
+      echo "server {"
+      echo "    listen 443 ssl;"
+      echo "    listen [::]:443 ssl;"
+      echo "    server_name $FB_DOMAIN;"
+      echo
+      echo "    ssl_certificate $cert_dir/fullchain.pem;"
+      echo "    ssl_certificate_key $cert_dir/privkey.pem;"
+      echo "    ssl_protocols TLSv1.2 TLSv1.3;"
+      echo
+      echo "$proxy"
+      echo "}"
+    fi
+  } >"$site"
+
+  [ -d /etc/nginx/sites-enabled ] && ln -sf "$site" /etc/nginx/sites-enabled/filebrowser
+  if ! nginx -t >/dev/null 2>&1; then
+    err "The generated nginx configuration is invalid:"
+    nginx -t >&2
+    if [ -n "$previous" ]; then printf '%s\n' "$previous" >"$site"; else rm -f "$site" /etc/nginx/sites-enabled/filebrowser; fi
+    return 1
+  fi
+  systemctl reload nginx
+}
+
+# remove_nginx_site removes the reverse-proxy site written by write_nginx_site.
+remove_nginx_site() {
+  local site
+  site="$(nginx_site_path)"
+  [ -f "$site" ] && grep -q "^$NGINX_MARKER" "$site" || return 0
+  rm -f "$site" /etc/nginx/sites-enabled/filebrowser
+  nginx_active && systemctl reload nginx
+  return 0
+}
+
 cmd_cert_renew() {
   require_root cert renew "$@"
   require_installed
@@ -797,16 +997,22 @@ cmd_cert_renew() {
   [ -n "$FB_DOMAIN" ] && force+=(--cert-name "$FB_DOMAIN")
   info "Renewing certificates..."
   certbot renew "${force[@]}" || die "Renewal failed."
-  # The deploy hook only runs when something was actually renewed; copying
-  # again is harmless and keeps certs in sync after manual changes.
-  [ -n "$FB_DOMAIN" ] && deploy_cert "/etc/letsencrypt/live/$FB_DOMAIN" && restart_if_running
+  if [ "$FB_PROXY" = "nginx" ]; then
+    systemctl reload nginx
+  else
+    # The deploy hook only runs when something was actually renewed; copying
+    # again is harmless and keeps certs in sync after manual changes.
+    [ -n "$FB_DOMAIN" ] && deploy_cert "/etc/letsencrypt/live/$FB_DOMAIN" && restart_if_running
+  fi
   ok "Certificates are up to date."
 }
 
 cmd_cert_disable() {
   require_root cert disable
   require_installed
+  [ "$FB_PROXY" = "nginx" ] && remove_nginx_site
   FB_TLS="false"
+  FB_PROXY="none"
   save_env
   write_compose
   compose up -d && ok "HTTPS disabled: $(base_url)"
@@ -934,6 +1140,7 @@ Users:
 
 HTTPS (Let's Encrypt):
   cert issue [domain] [email]       Get a certificate and enable HTTPS
+                                    (served through nginx when nginx is running)
   cert renew [--force]              Renew now (also renewed automatically)
   cert disable                      Go back to plain HTTP
 
