@@ -328,11 +328,97 @@ fb_cli_quiet() {
 # Commands: lifecycle
 # ---------------------------------------------------------------------------
 
+# cleanup_legacy removes leftovers of the old non-Docker setup from the
+# README (a systemd unit running the binary and an nginx + certbot proxy),
+# which hold the ports the container and certbot need.
+cmd_cleanup_legacy() {
+  require_root cleanup-legacy
+  local unit found=0
+  for unit in /etc/systemd/system/filebrowser.service /lib/systemd/system/filebrowser.service; do
+    [ -f "$unit" ] || continue
+    found=1
+    warn "Found the old File Browser systemd service: $unit"
+    if confirm "Stop and remove it? (its config and database in /etc/filebrowser are kept)" y; then
+      systemctl disable --now filebrowser.service >/dev/null 2>&1 || true
+      rm -f "$unit"
+      systemctl daemon-reload
+      systemctl reset-failed filebrowser.service >/dev/null 2>&1 || true
+      ok "Removed the old systemd service."
+    fi
+  done
+
+  local sites=() site domains=()
+  for site in /etc/nginx/sites-enabled/filebrowser /etc/nginx/sites-available/filebrowser /etc/nginx/conf.d/filebrowser.conf; do
+    [ -e "$site" ] || [ -L "$site" ] || continue
+    sites+=("$site")
+    if [ -f "$site" ]; then
+      # shellcheck disable=SC2207
+      domains+=($(awk '$1 == "server_name" { for (i = 2; i <= NF; i++) { gsub(";", "", $i); print $i } }' "$site" | sort -u))
+    fi
+  done
+  if [ "${#sites[@]}" -gt 0 ]; then
+    found=1
+    warn "Found an old nginx site for File Browser: ${sites[*]}"
+    if confirm "Remove it? (nginx would otherwise keep ports 80/443 busy)" y; then
+      rm -f "${sites[@]}"
+      ok "Removed the nginx site."
+      remove_nginx_if_unused
+      remove_nginx_certs "${domains[@]}"
+    fi
+  fi
+
+  [ "$found" -eq 0 ] && ok "No leftovers of an old installation found."
+  return 0
+}
+
+remove_nginx_if_unused() {
+  command -v nginx >/dev/null 2>&1 || return 0
+  local others
+  others="$(find /etc/nginx/sites-enabled /etc/nginx/conf.d -mindepth 1 -maxdepth 1 ! -name default 2>/dev/null)"
+  if [ -n "$others" ]; then
+    warn "nginx still serves other sites, keeping it:"
+    printf '%s\n' "$others" | sed 's/^/    /' >&2
+    nginx -t >/dev/null 2>&1 && systemctl reload nginx >/dev/null 2>&1
+    warn "nginx keeps ports 80/443, so use another port for File Browser and keep HTTPS in nginx."
+    return 0
+  fi
+  if confirm "nginx serves nothing else now. Stop and uninstall nginx?" y; then
+    systemctl disable --now nginx >/dev/null 2>&1 || true
+    if command -v apt-get >/dev/null 2>&1; then
+      DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq 'nginx*' python3-certbot-nginx >/dev/null 2>&1
+      apt-get autoremove -y -qq >/dev/null 2>&1
+    elif command -v dnf >/dev/null 2>&1; then
+      dnf remove -y -q nginx python3-certbot-nginx >/dev/null 2>&1
+    elif command -v yum >/dev/null 2>&1; then
+      yum remove -y -q nginx python3-certbot-nginx >/dev/null 2>&1
+    fi
+    ok "nginx stopped and uninstalled."
+  fi
+}
+
+# remove_nginx_certs deletes certificates that certbot can only renew through
+# nginx; `cert issue` gets a new one that renews without it.
+remove_nginx_certs() {
+  command -v certbot >/dev/null 2>&1 || return 0
+  command -v nginx >/dev/null 2>&1 && return 0
+  local domain conf
+  for domain in "$@"; do
+    conf="/etc/letsencrypt/renewal/$domain.conf"
+    if [ ! -f "$conf" ] || ! grep -qE '^(authenticator|installer) *= *nginx' "$conf"; then
+      continue
+    fi
+    if confirm "Delete the nginx-based certificate for $domain? (it cannot renew without nginx)" y; then
+      certbot delete --non-interactive --cert-name "$domain" >/dev/null 2>&1 && ok "Deleted the certificate for $domain."
+    fi
+  done
+}
+
 cmd_install() {
   require_root "install" "$@"
   require_linux
   ensure_curl
   ensure_docker
+  cmd_cleanup_legacy
 
   if is_installed; then
     load_env
@@ -366,6 +452,12 @@ cmd_install() {
   save_env
   prepare_dirs
   write_compose
+
+  if ! is_running && port_in_use "$FB_PORT"; then
+    err "Port $FB_PORT is already in use:"
+    ss -ltnpH "sport = :$FB_PORT" >&2
+    die "Free the port or run '$APP_NAME install' again and choose another one."
+  fi
 
   info "Pulling $FB_IMAGE..."
   compose pull || die "Could not pull $FB_IMAGE. Set a reachable image with: FB_IMAGE=... $APP_NAME install"
@@ -624,15 +716,24 @@ cmd_cert_issue() {
     hooks=(--pre-hook "$BIN_PATH stop" --post-hook "$BIN_PATH start")
   fi
   if port_in_use 80; then
-    warn "Port 80 is used by another program; certbot needs it free to verify your domain."
+    warn "Port 80 is used by another program; certbot needs it free to verify your domain:"
+    ss -ltnpH "sport = :80" >&2
   fi
 
   local email_args=(--register-unsafely-without-email)
   [ -n "$email" ] && email_args=(-m "$email")
 
+  # An existing certificate obtained another way (e.g. certbot --nginx) would
+  # keep renewing that way, so replace it with a standalone one.
+  local mode=(--keep-until-expiring)
+  local renewal_conf="/etc/letsencrypt/renewal/$domain.conf"
+  if [ -f "$renewal_conf" ] && ! grep -qE '^authenticator *= *standalone' "$renewal_conf"; then
+    mode=(--force-renewal)
+  fi
+
   info "Requesting a certificate for $domain..."
   if ! certbot certonly --standalone --non-interactive --agree-tos "${email_args[@]}" \
-    -d "$domain" --keep-until-expiring "${hooks[@]}" \
+    -d "$domain" "${mode[@]}" "${hooks[@]}" \
     --deploy-hook "$BIN_PATH cert-deploy"; then
     [ "$stopped" -eq 1 ] && compose start >/dev/null 2>&1
     err "certbot failed. Check that $domain points to this server and port 80 is reachable."
@@ -786,6 +887,7 @@ Service:
   logs                      Follow container logs
   update                    Pull the latest image and recreate the container
   set-port <port>           Change the published port
+  cleanup-legacy            Remove an old systemd service / nginx site for File Browser
   uninstall                 Remove File Browser
 
 Users:
@@ -824,6 +926,7 @@ main() {
     update) cmd_update ;;
     set-port) cmd_set_port "$@" ;;
     uninstall) cmd_uninstall ;;
+    cleanup-legacy) cmd_cleanup_legacy ;;
     users | user) cmd_users "$@" ;;
     cert | certs | ssl) cmd_cert "$@" ;;
     cert-deploy) cmd_cert_deploy ;;
