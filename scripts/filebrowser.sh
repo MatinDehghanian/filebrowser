@@ -40,6 +40,8 @@ FB_EMAIL="${FB_EMAIL:-}"
 FB_TLS="${FB_TLS:-false}"
 # "nginx" when an existing nginx serves File Browser on https://$FB_DOMAIN.
 FB_PROXY="${FB_PROXY:-none}"
+# "true" runs the container as root, for shared folders only root can open (e.g. /root).
+FB_RUN_AS_ROOT="${FB_RUN_AS_ROOT:-false}"
 
 # ---------------------------------------------------------------------------
 # Output helpers
@@ -166,6 +168,7 @@ save_env() {
     printf 'FB_EMAIL=%q\n' "$FB_EMAIL"
     printf 'FB_TLS=%q\n' "$FB_TLS"
     printf 'FB_PROXY=%q\n' "$FB_PROXY"
+    printf 'FB_RUN_AS_ROOT=%q\n' "$FB_RUN_AS_ROOT"
   } >"$ENV_FILE"
   chmod 600 "$ENV_FILE"
 }
@@ -230,7 +233,9 @@ ensure_docker() {
 }
 
 write_compose() {
-  local tls_env="" tls_volume="" healthcheck="" publish="$FB_PORT:80"
+  local tls_env="" tls_volume="" healthcheck="" publish="$FB_PORT:80" user=""
+  [ "$FB_RUN_AS_ROOT" = "true" ] && user="
+    user: \"0:0\""
   # Behind nginx the port is only reachable from this server.
   [ "$FB_PROXY" = "nginx" ] && publish="127.0.0.1:$FB_PORT:80"
   if [ "$FB_TLS" = "true" ]; then
@@ -251,7 +256,7 @@ write_compose() {
 services:
   filebrowser:
     image: $FB_IMAGE
-    container_name: $APP_NAME
+    container_name: $APP_NAME$user
     restart: unless-stopped
     ports:
       - "$publish"
@@ -268,10 +273,63 @@ prepare_dirs() {
   if [ ! -d "$FB_FILES_DIR" ]; then
     mkdir -p "$FB_FILES_DIR"
     chown "$CONTAINER_UID:$CONTAINER_GID" "$FB_FILES_DIR"
-  elif [ "$(stat -c %u "$FB_FILES_DIR" 2>/dev/null)" != "$CONTAINER_UID" ]; then
-    warn "$FB_FILES_DIR is not owned by UID $CONTAINER_UID; File Browser may not be able to write to it."
-    warn "Fix with: chown -R $CONTAINER_UID:$CONTAINER_GID $FB_FILES_DIR"
   fi
+}
+
+# container_can_access <dir> is true when the container's non-root user can
+# read and write the directory.
+container_can_access() {
+  local dir="$1"
+  if command -v setpriv >/dev/null 2>&1; then
+    setpriv --reuid "$CONTAINER_UID" --regid "$CONTAINER_GID" --clear-groups \
+      test -r "$dir" -a -w "$dir" -a -x "$dir" 2>/dev/null
+  else
+    [ "$(stat -c %u "$dir" 2>/dev/null)" = "$CONTAINER_UID" ]
+  fi
+}
+
+# choose_dir_access decides whether the container must run as root to use
+# $FB_FILES_DIR, asking before it does.
+choose_dir_access() {
+  if [ "$FB_FILES_DIR" = "/" ]; then
+    warn "Sharing / gives File Browser admins access to the whole server."
+    confirm "Share / anyway?" n || return 1
+  fi
+  if [ ! -d "$FB_FILES_DIR" ] || container_can_access "$FB_FILES_DIR"; then
+    FB_RUN_AS_ROOT="false"
+    return 0
+  fi
+  warn "$FB_FILES_DIR can only be opened by root, but File Browser runs as UID $CONTAINER_UID."
+  warn "Running it as root lets File Browser admins read and change everything in $FB_FILES_DIR."
+  if confirm "Run File Browser as root?" y; then
+    FB_RUN_AS_ROOT="true"
+    return 0
+  fi
+  FB_RUN_AS_ROOT="false"
+  case "$FB_FILES_DIR" in
+    /root | /root/*) warn "Do not chown /root: SSH rejects keys in /root/.ssh that root does not own." ;;
+    *) warn "Give UID $CONTAINER_UID access instead, e.g.: chown -R $CONTAINER_UID:$CONTAINER_GID $FB_FILES_DIR" ;;
+  esac
+  return 0
+}
+
+cmd_set_dir() {
+  require_root set-dir "$@"
+  require_installed
+  local dir="${1:-}"
+  [ -z "$dir" ] && ask dir "Directory to share" "$FB_FILES_DIR"
+  case "$dir" in /*) ;; *) die "Use an absolute path, e.g. /root" ;; esac
+  [ "$dir" != "/" ] && dir="${dir%/}"
+  if [ ! -d "$dir" ]; then
+    confirm "$dir does not exist. Create it?" y || return 0
+  fi
+  FB_FILES_DIR="$dir"
+  choose_dir_access || return 0
+  save_env
+  prepare_dirs
+  write_compose
+  compose up -d || die "Could not restart File Browser."
+  ok "File Browser now shares $FB_FILES_DIR$([ "$FB_RUN_AS_ROOT" = "true" ] && echo " (running as root)")"
 }
 
 is_running() {
@@ -440,6 +498,8 @@ cmd_install() {
   echo
   printf '%sFile Browser setup%s\n' "$C_BOLD" "$C_RESET"
   ask FB_FILES_DIR "Directory to share" "$FB_FILES_DIR"
+  [ "$FB_FILES_DIR" != "/" ] && FB_FILES_DIR="${FB_FILES_DIR%/}"
+  choose_dir_access || return 0
   ask FB_PORT "Port to listen on" "$FB_PORT"
   ask FB_IMAGE "Docker image" "$FB_IMAGE"
 
@@ -542,6 +602,7 @@ cmd_status() {
   printf '  Image:      %s\n' "$FB_IMAGE"
   printf '  Files:      %s\n' "$FB_FILES_DIR"
   printf '  Data:       %s\n' "$APP_DIR/data"
+  printf '  Runs as:    %s\n' "$([ "$FB_RUN_AS_ROOT" = "true" ] && echo "root" || echo "UID $CONTAINER_UID")"
   local https="off" cert=""
   if [ "$FB_PROXY" = "nginx" ]; then
     https="on via nginx ($FB_DOMAIN, File Browser on 127.0.0.1:$FB_PORT)"
@@ -1079,8 +1140,8 @@ menu() {
   16) Disable HTTPS
 
   ${C_BOLD}Other${C_RESET}
-  17) Change port     18) Update this script
-  19) Uninstall        0) Exit
+  17) Change port     18) Change shared folder
+  19) Update script   20) Uninstall       0) Exit
 
 EOF
     local choice
@@ -1105,8 +1166,9 @@ EOF
       15) (cmd_cert_renew) ;;
       16) (cmd_cert_disable) ;;
       17) (cmd_set_port) ;;
-      18) (cmd_self_update) && exec "$BIN_PATH" ;;
-      19) (cmd_uninstall) && ! is_installed && exit 0 ;;
+      18) (cmd_set_dir) ;;
+      19) (cmd_self_update) && exec "$BIN_PATH" ;;
+      20) (cmd_uninstall) && ! is_installed && exit 0 ;;
       0 | q | exit) exit 0 ;;
       *) err "Invalid option: $choice" ;;
     esac
@@ -1127,6 +1189,7 @@ Service:
   logs                      Follow container logs
   update                    Pull the latest image and recreate the container
   set-port <port>           Change the published port
+  set-dir <path>            Change the shared folder (e.g. /root)
   cleanup-legacy            Remove an old systemd service / nginx site for File Browser
   uninstall                 Remove File Browser
 
@@ -1166,6 +1229,7 @@ main() {
     logs) cmd_logs ;;
     update) cmd_update ;;
     set-port) cmd_set_port "$@" ;;
+    set-dir) cmd_set_dir "$@" ;;
     uninstall) cmd_uninstall ;;
     cleanup-legacy) cmd_cleanup_legacy ;;
     users | user) cmd_users "$@" ;;

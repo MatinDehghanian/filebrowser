@@ -46,7 +46,9 @@ Afterwards, type `filebrowser` to open the management menu:
   ...
 ```
 
-Every entry is also a sub-command, for example `filebrowser users passwd admin`, `filebrowser cert issue files.example.com` or `filebrowser cert renew --force`. Run `filebrowser help` for the full list. To run the File Browser binary itself inside the container, use `filebrowser cli <args>`.
+Every entry is also a sub-command, for example `filebrowser set-dir /root`, `filebrowser users passwd admin`, `filebrowser cert issue files.example.com` or `filebrowser cert renew --force`. Run `filebrowser help` for the full list.
+
+A folder only root can open, such as `/root`, needs the container to run as root; `set-dir` asks before switching. File Browser admins can then read and change everything in that folder, so keep their passwords strong and narrow other users' scope (Settings → User Management). To run the File Browser binary itself inside the container, use `filebrowser cli <args>`.
 
 ### Offline Installation
 
