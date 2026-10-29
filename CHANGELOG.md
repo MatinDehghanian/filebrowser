@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [0.5.5](https://github.com/MatinDehghanian/filebrowser/compare/v0.5.4...v0.5.5) (2026-10-29)
+
+### Bug Fixes
+
+* **frontend:** pad native select arrows consistently ([fd87a77](https://github.com/MatinDehghanian/filebrowser/commit/fd87a7760c3d1a52a1ca5c810f77727bcbfa619d))
+* **search:** require every term and ignore repeated spaces ([cbe36af](https://github.com/MatinDehghanian/filebrowser/commit/cbe36afd8d7423143466d64f2d4d8af90c0be655))
+* **frontend:** restyle storage usage to match the sidebar ([b2a527d](https://github.com/MatinDehghanian/filebrowser/commit/b2a527d66125b920be263a8d57c604c5ca5d2b13))
+* **frontend:** fit the selection bar to its available width ([86348b4](https://github.com/MatinDehghanian/filebrowser/commit/86348b4832fc38d101c5630da53a58498a71293a))
+
+### Performance improvements
+
+* **frontend:** stream search results and stop at 500 ([dd76d18](https://github.com/MatinDehghanian/filebrowser/commit/dd76d18f66280fd6217510dc0e210a4c01d4b469))
+
+## [0.5.4](https://github.com/MatinDehghanian/filebrowser/compare/v0.5.3...v0.5.4) (2026-10-29)
+
+### Styles
+
+* **frontend:** improve layout and formatting in shares and users settings pages ([5e92536](https://github.com/MatinDehghanian/filebrowser/commit/5e9253638b65c34aa16ae5543fc8ef726945f42b))
+
 ## [0.5.3](https://github.com/MatinDehghanian/filebrowser/compare/v0.5.2...v0.5.3) (2026-10-29)
 
 ### Features
